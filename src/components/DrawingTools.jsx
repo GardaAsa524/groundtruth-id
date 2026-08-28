@@ -22,7 +22,20 @@ import { useMap } from 'react-leaflet';
 import L from 'leaflet';
 import { useLocale } from '../context/AppProviders.jsx';
 
-export function DrawingTools({ onChange, defaultProperties = {} }) {
+/**
+ * Kendali digitasi. WAJIB dirender di dalam <MapContainer>.
+ *
+ * Komponen ini memanggil useMap(), dan react-leaflet melempar galat bila
+ * dipanggil di luar MapContainer. Galat itu tidak tertangkap oleh apa pun:
+ * React membatalkan seluruh pohon dan yang tampil adalah halaman putih total,
+ * bukan sekadar komponen yang hilang. Karena itu bagian antarmukanya
+ * (penghitung dan tombol Kosongkan) dipisahkan ke <DrawingPanel> yang bebas
+ * dari useMap dan boleh diletakkan di panel samping.
+ *
+ * @param {object} controlsRef ref yang akan diisi { clearAll, addFeature }
+ *        supaya panel samping dapat memerintah tanpa perlu akses ke peta.
+ */
+export function DrawingTools({ onChange, defaultProperties = {}, controlsRef }) {
   const map = useMap();
   const { t, locale } = useLocale();
   const groupRef = useRef(null);
@@ -53,6 +66,16 @@ export function DrawingTools({ onChange, defaultProperties = {} }) {
     let disposed = false;
 
     (async () => {
+      // Geoman adalah plugin Leaflet gaya lama: berkas dist-nya mengacu ke
+      // variabel global `L`, bukan mengimpor leaflet sebagai modul. Dalam
+      // bundel ESM, `L` tidak pernah menjadi global, sehingga plugin gagal
+      // dimuat dengan "ReferenceError: L is not defined" dan menjatuhkan
+      // seluruh aplikasi. Menyediakan globalnya sebelum impor adalah pola baku
+      // untuk plugin Leaflet di Vite.
+      // Ditulis ke globalThis, bukan window: di peramban keduanya objek yang
+      // sama, tetapi pencarian variabel bebas selalu berakhir di globalThis.
+      if (typeof globalThis !== 'undefined' && !globalThis.L) globalThis.L = L;
+
       // Muat saat dibutuhkan; Geoman ~90 kB tergzip.
       await import('@geoman-io/leaflet-geoman-free');
       await import('@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css');
@@ -135,11 +158,35 @@ export function DrawingTools({ onChange, defaultProperties = {} }) {
     emit();
   }, [emit]);
 
+  // Serahkan kendali ke pemanggil supaya panel samping dapat memakainya.
+  useEffect(() => {
+    if (controlsRef) controlsRef.current = { clearAll, addFeature, count };
+  }, [controlsRef, clearAll, addFeature, count]);
+
+  // Tidak menggambar apa pun sendiri: seluruh antarmukanya milik Geoman,
+  // yang menyisipkan kendalinya langsung ke kontainer peta.
+  return null;
+}
+
+/**
+ * Panel samping digitasi.
+ *
+ * Sengaja tidak memanggil useMap(), sehingga aman diletakkan di mana saja di
+ * luar peta. Jumlah geometri dibaca dari FeatureCollection yang sudah ada di
+ * status aplikasi, bukan dari instans Leaflet.
+ */
+export function DrawingPanel({ featureCollection, controlsRef }) {
+  const { t } = useLocale();
+  const n = featureCollection?.features?.length ?? 0;
+
   return (
     <div className="gt-draw-tools">
       <p className="gt-hint">{t('draw.hint')}</p>
-      <p><strong>{count}</strong> {t('draw.featureCount')}</p>
-      <button type="button" onClick={clearAll} disabled={!count}>{t('draw.clear')}</button>
+      <p><strong>{n}</strong> {t('draw.featureCount')}</p>
+      <button type="button" disabled={!n}
+        onClick={() => controlsRef?.current?.clearAll?.()}>
+        {t('draw.clear')}
+      </button>
     </div>
   );
 }

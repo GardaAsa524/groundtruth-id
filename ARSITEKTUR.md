@@ -3,9 +3,36 @@
 Dokumen ini menjelaskan rancangan lima modul baru dan alasan teknis di balik
 setiap keputusan yang tidak jelas dari kodenya sendiri.
 
-Seluruh logika inti diuji di Node: `npm test` menjalankan 66 uji yang mencakup
+Seluruh logika inti diuji di Node: `npm test` menjalankan 77 uji yang mencakup
 proyeksi, pencocokan affine, reproyeksi bbox, parser ekspresi, evaluator,
-kueri atribut, dan metrik akurasi.
+kueri atribut, metrik akurasi, dan pemasangan nyata antarmuka di jsdom.
+
+### Mengapa ada uji pemasangan (test/smoke.test.mjs)
+
+Versi pertama yang diterbitkan menampilkan **halaman putih total**, padahal
+seluruh uji logika lulus, `vite build` berhasil, dan bundelnya bersih. Dua
+cacat lolos dari semua pemeriksaan itu:
+
+1. `<DrawingTools>` memanggil `useMap()` tetapi dirender di panel samping, di
+   luar `<MapContainer>`. react-leaflet melempar galat, React membatalkan
+   seluruh pohon, dan tidak ada apa pun yang tergambar.
+2. Geoman adalah plugin Leaflet gaya lama yang mengacu ke variabel global `L`.
+   Dalam bundel ESM, `L` tidak pernah menjadi global.
+
+Keduanya sah secara sintaksis, sehingga esbuild dan Rollup meloloskannya; dan
+keduanya tidak menyentuh modul `core/`, sehingga uji logika tidak melihatnya.
+Satu-satunya cara menangkapnya sebelum sampai ke lapangan adalah benar-benar
+memasang komponennya.
+
+Uji ini melakukan dua hal. Pertama, analisis statis: ia memindai setiap
+komponen yang memanggil `useMap()`, lalu memastikan tak satu pun dirender di
+luar batas `<MapContainer>` pada `App.jsx`. Kedua, `App` dibundel dengan
+esbuild lalu dipasang sungguhan di jsdom, dan hasil render diperiksa tidak
+kosong serta bebas galat React.
+
+Pelajaran yang layak dibawa: **bundel yang berhasil dibuat bukan bukti aplikasi
+berjalan.** Untuk aplikasi yang dipakai di lapangan, jarak antara keduanya
+adalah perjalanan yang sia-sia.
 
 ```
 src/

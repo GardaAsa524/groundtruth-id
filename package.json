@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node test/core.test.mjs && node test/render.test.mjs"
+    "test": "node test/core.test.mjs && node test/render.test.mjs && node test/smoke.test.mjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.17.0",
@@ -24,6 +24,7 @@
   "devDependencies": {
     "@vitejs/plugin-react": "^4.3.1",
     "esbuild": "^0.24.0",
+    "jsdom": "^25.0.0",
     "vite": "^5.4.0",
     "vite-plugin-pwa": "^1.0.0"
   },

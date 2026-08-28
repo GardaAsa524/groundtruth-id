@@ -31,7 +31,7 @@
  * ProjectContext. Modul tidak saling mengimpor; mereka bertemu di sini.
  */
 
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { MapContainer, ScaleControl } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
@@ -44,7 +44,7 @@ import { useGeoTIFF, RasterCalculator, RasterResultLayer } from './components/Ra
 import {
   useVectorFile, AttributeQueryBuilder, FilteredVectorLayer,
 } from './components/AttributeQueryBuilder.jsx';
-import { DrawingTools, ExportButton } from './components/DrawingTools.jsx';
+import { DrawingTools, DrawingPanel, ExportButton } from './components/DrawingTools.jsx';
 import { forwardUTM, utmZoneFromLon } from './core/geo/projection.js';
 import {
   buildMatrix, computeMetrics, computeBinaryValidation, matrixToCSV,
@@ -66,6 +66,9 @@ function Workspace() {
   const [rasterGeom, setRasterGeom] = useState(null);
   const [queryResult, setQueryResult] = useState(null);
   const [filterMode, setFilterMode] = useState('dim');
+
+  // Jembatan dari panel samping ke kendali digitasi yang hidup di dalam peta.
+  const drawControls = useRef(null);
 
   const geo = useGeolocation({ toleranceMeters: 15 });
   const pdf = useGeoPDF();
@@ -183,7 +186,7 @@ function Workspace() {
                 )}
 
                 <hr />
-                <DrawingTools onChange={setDrawnFeatures} />
+                <DrawingPanel featureCollection={drawnFeatures} controlsRef={drawControls} />
                 <ExportButton featureCollection={drawnFeatures} />
 
                 <hr />
@@ -294,6 +297,9 @@ function Workspace() {
             )}
 
             <GPSAccuracyLayer geo={geo} follow={follow} onFollowBreak={() => setFollow(false)} />
+
+            {/* Wajib di dalam MapContainer: memanggil useMap(). */}
+            <DrawingTools onChange={setDrawnFeatures} controlsRef={drawControls} />
           </MapContainer>
 
           <ValidationSwitch
