@@ -1,0 +1,30 @@
+<!doctype html>
+<html lang="id" data-theme="light">
+<head>
+<meta charset="utf-8">
+<!-- viewport-fit=cover + safe-area di CSS: tanpa ini, bilah validasi tertutup
+     indikator gestur iPhone dan tombol Truth/False tidak bisa ditekan. -->
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=5, viewport-fit=cover">
+<meta name="theme-color" content="#0c1512">
+<meta name="description" content="Platform survei lapangan dan uji akurasi data spasial oleh MangGIS.co">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="GroundTruth">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
+<link rel="icon" href="icon-192.png" type="image/png">
+<title>GroundTruth.id — MangGIS.co</title>
+</head>
+<body>
+<div id="root"></div>
+
+<div id="gt-offline-bar" class="gt-toast is-ok" hidden>
+  Siap dipakai tanpa jaringan.
+</div>
+<div id="gt-update-bar" class="gt-toast" hidden>
+  <span>Versi baru tersedia.</span>
+  <button id="gt-update-now" type="button">Perbarui</button>
+</div>
+<script type="module" src="/src/main.jsx"></script>
+</body>
+</html>
