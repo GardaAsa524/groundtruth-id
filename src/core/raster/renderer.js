@@ -19,7 +19,10 @@
  *      (lihat renderTiled) sehingga puncak memori tetap datar.
  */
 
-import { emitGLSL, VERTEX_SHADER, buildFragmentShader, rampToPixels, COLORMAPS } from './glsl.js';
+import {
+  emitGLSL, VERTEX_SHADER, buildFragmentShader, buildRGBFragmentShader,
+  rampToPixels, COLORMAPS,
+} from './glsl.js';
 
 /* ------------------------------------------------------------- statistik */
 
@@ -145,7 +148,76 @@ export class RasterGLRenderer {
     if (this.program) gl.deleteProgram(this.program);
     this.program = prog;
     this.bands = bands;
+    this.mode = 'index';
     return { fragSrc, exprSrc };
+  }
+
+  /**
+   * Kompilasi jalur komposit RGB.
+   * @param {{r:string,g:string,b:string,alpha?:string}} roles nama pita per saluran
+   */
+  compileRGB(roles, { hasNoData = false } = {}) {
+    const gl = this.gl;
+    const hasAlpha = !!roles.alpha;
+    const fragSrc = buildRGBFragmentShader({ hasNoData, hasAlpha });
+
+    const vs = this._shader(gl.VERTEX_SHADER, VERTEX_SHADER);
+    const fs = this._shader(gl.FRAGMENT_SHADER, fragSrc);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.bindAttribLocation(prog, 0, 'a_pos');
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+      const log = gl.getProgramInfoLog(prog);
+      gl.deleteProgram(prog);
+      throw new Error(`Gagal menautkan shader RGB: ${log}`);
+    }
+    gl.deleteShader(vs);
+    gl.deleteShader(fs);
+    if (this.program) gl.deleteProgram(this.program);
+    this.program = prog;
+    this.mode = 'rgb';
+    this.roles = roles;
+    return { fragSrc };
+  }
+
+  renderRGB({ min, max, opacity = 1, nodata = null, gamma = 1, alphaCutoff = 0 }) {
+    const gl = this.gl;
+    if (!this.program || this.mode !== 'rgb') throw new Error('Shader RGB belum dikompilasi');
+
+    this.canvas.width = this.width;
+    this.canvas.height = this.height;
+    gl.viewport(0, 0, this.width, this.height);
+    gl.useProgram(this.program);
+    gl.bindVertexArray(this._vao);
+    gl.bindBuffer(gl.ARRAY_BUFFER, this._quadBuf);
+    gl.enableVertexAttribArray(0);
+    gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+
+    const bind = (name, uniform, unit) => {
+      gl.activeTexture(gl.TEXTURE0 + unit);
+      gl.bindTexture(gl.TEXTURE_2D, this.textures.get(name));
+      gl.uniform1i(gl.getUniformLocation(this.program, uniform), unit);
+    };
+    bind(this.roles.r, 'u_r', 0);
+    bind(this.roles.g, 'u_g', 1);
+    bind(this.roles.b, 'u_b', 2);
+    if (this.roles.alpha) bind(this.roles.alpha, 'u_alpha', 3);
+
+    const u = (n) => gl.getUniformLocation(this.program, n);
+    gl.uniform3f(u('u_min'), min[0], min[1], min[2]);
+    gl.uniform3f(u('u_max'), max[0], max[1], max[2]);
+    gl.uniform1f(u('u_opacity'), opacity);
+    gl.uniform1f(u('u_nodata'), nodata ?? 0);
+    gl.uniform1f(u('u_gamma'), gamma);
+    gl.uniform1f(u('u_alphaCutoff'), alphaCutoff);
+
+    gl.clearColor(0, 0, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.BLEND);
+    gl.blendFunc(gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
   }
 
   _shader(type, src) {

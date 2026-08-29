@@ -22,53 +22,157 @@ import {
   inferSchema, compileQuery, applyQuery, queryToSQL, summarizeField,
   emptyGroup, newRule, OPERATORS, FIELD_TYPES,
 } from '../core/vector/query.js';
+import {
+  detectVectorCRS, reprojectToWGS84, boundsOf, epsgFromPRJ, utmZoneCandidates,
+} from '../core/vector/reproject.js';
 import { useLocale } from '../context/AppProviders.jsx';
 
 /* --------------------------------------------------------------- pemuatan */
 
 export function useVectorFile() {
-  const [state, setState] = useState({ status: 'idle', fc: null, schema: null, error: null });
+  const [state, setState] = useState({
+    status: 'idle', fc: null, schema: null, error: null,
+    crs: null, needsCRS: false, bounds: null, name: null,
+  });
+  const rawRef = useRef(null);      // data mentah sebelum reproyeksi
+
+  /** Terapkan CRS ke data mentah dan siapkan hasilnya. */
+  const applyCRS = useCallback((epsg) => {
+    const raw = rawRef.current;
+    if (!raw) return;
+    const { fc, reprojected, error } = reprojectToWGS84(raw, epsg);
+    if (error) { setState((s) => ({ ...s, error })); return; }
+    setState((s) => ({
+      ...s,
+      status: 'ready',
+      fc,
+      schema: inferSchema(fc),
+      bounds: boundsOf(fc),
+      needsCRS: false,
+      error: null,
+      crs: { epsg: Number(epsg), reprojected },
+    }));
+  }, []);
 
   const load = useCallback(async (files) => {
-    setState({ status: 'loading', fc: null, schema: null, error: null });
+    setState({ status: 'loading', fc: null, schema: null, error: null,
+      crs: null, needsCRS: false, bounds: null, name: null });
     try {
       const list = Array.from(files);
       let fc;
+      let prjEPSG = null;
+      let name = list[0]?.name ?? 'vektor';
 
       const geojson = list.find((f) => /\.(geojson|json)$/i.test(f.name));
       if (geojson) {
         fc = JSON.parse(await geojson.text());
+        name = geojson.name;
       } else {
-        // Shapefile: butuh .shp dan .dbf minimal; .prj menentukan CRS.
-        // shpjs menerima ZIP atau kumpulan ArrayBuffer.
         const shp = (await import('shpjs')).default;
         const zip = list.find((f) => /\.zip$/i.test(f.name));
         if (zip) {
           fc = await shp(await zip.arrayBuffer());
+          name = zip.name;
         } else {
           const get = (ext) => list.find((f) => new RegExp(`\\.${ext}$`, 'i').test(f.name));
           const shpFile = get('shp');
           const dbfFile = get('dbf');
+          const prjFile = get('prj');
           if (!shpFile) throw new Error('Berkas .shp tidak ditemukan.');
           if (!dbfFile) throw new Error('Berkas .dbf tidak ditemukan — tabel atribut wajib ada untuk kueri.');
+          const prjText = prjFile ? await prjFile.text() : undefined;
+          // .prj menyimpan CRS sumber; inilah satu-satunya sumber kebenaran
+          // yang tersedia untuk shapefile.
+          prjEPSG = epsgFromPRJ(prjText);
           fc = shp.combine([
-            shp.parseShp(await shpFile.arrayBuffer(), get('prj') ? await get('prj').text() : undefined),
+            shp.parseShp(await shpFile.arrayBuffer(), prjText),
             shp.parseDbf(await dbfFile.arrayBuffer(), get('cpg') ? await get('cpg').text() : undefined),
           ]);
+          name = shpFile.name;
         }
       }
 
-      if (Array.isArray(fc)) fc = { type: 'FeatureCollection', features: fc.flatMap((c) => c.features) };
+      if (Array.isArray(fc)) {
+        fc = { type: 'FeatureCollection', features: fc.flatMap((c) => c.features) };
+      }
       if (!fc?.features?.length) throw new Error('Tidak ada fitur di dalam berkas.');
 
-      const schema = inferSchema(fc);
-      setState({ status: 'ready', fc, schema, error: null });
+      rawRef.current = fc;
+      const detected = detectVectorCRS(fc);
+
+      if (detected.kind === 'geographic') {
+        setState({
+          status: 'ready', fc, schema: inferSchema(fc), bounds: boundsOf(fc),
+          error: null, crs: { epsg: 4326, reprojected: false }, needsCRS: false, name,
+        });
+        return;
+      }
+
+      // Terproyeksi. Cari kode EPSG dari sumber yang tersedia.
+      const epsg = detected.declared ?? prjEPSG;
+      if (epsg) {
+        const { fc: out, reprojected, error } = reprojectToWGS84(fc, epsg);
+        if (error) throw new Error(error);
+        setState({
+          status: 'ready', fc: out, schema: inferSchema(out), bounds: boundsOf(out),
+          error: null, crs: { epsg: Number(epsg), reprojected }, needsCRS: false, name,
+        });
+        return;
+      }
+
+      // Tidak ada informasi CRS sama sekali. Menebak zonanya dari nilai easting
+      // dan northing saja mustahil, jadi kita bertanya alih-alih menempatkan
+      // data di lokasi yang salah tanpa memberi tahu.
+      setState({
+        status: 'needs-crs', fc: null, schema: null, bounds: null, error: null,
+        needsCRS: true, name,
+        crs: { likelySouth: detected.likelySouth, sample: [detected.maxAbsX, detected.maxAbsY] },
+      });
     } catch (err) {
-      setState({ status: 'error', fc: null, schema: null, error: err.message });
+      setState({ status: 'error', fc: null, schema: null, error: err.message,
+        crs: null, needsCRS: false, bounds: null, name: null });
     }
   }, []);
 
-  return { ...state, load };
+  const clear = useCallback(() => {
+    rawRef.current = null;
+    setState({ status: 'idle', fc: null, schema: null, error: null,
+      crs: null, needsCRS: false, bounds: null, name: null });
+  }, []);
+
+  return { ...state, load, applyCRS, clear };
+}
+
+/** Penanya CRS, muncul hanya bila berkas terproyeksi tanpa keterangan EPSG. */
+export function CRSPrompt({ vector, onPick }) {
+  const { t } = useLocale();
+  const [epsg, setEpsg] = useState('');
+  if (!vector.needsCRS) return null;
+
+  const opsi = utmZoneCandidates(vector.crs?.likelySouth ?? true);
+
+  return (
+    <div className="gt-crs-prompt">
+      <p className="gt-gps-alert">{t('vector.projectedNoCRS')}</p>
+      <p className="gt-hint mono">
+        contoh koordinat: {Math.round(vector.crs?.sample?.[0] ?? 0)},{' '}
+        {Math.round(vector.crs?.sample?.[1] ?? 0)}
+      </p>
+      <label className="gt-field">
+        {t('vector.pickCRS')}
+        <select value={epsg} onChange={(e) => setEpsg(e.target.value)}>
+          <option value="">—</option>
+          {opsi.map((o) => (
+            <option key={o.epsg} value={o.epsg}>{o.label} (EPSG:{o.epsg})</option>
+          ))}
+        </select>
+      </label>
+      <button type="button" className="gt-btn-primary" disabled={!epsg}
+        onClick={() => onPick(epsg)}>
+        {t('vector.applyCRS')}
+      </button>
+    </div>
+  );
 }
 
 /* ---------------------------------------------------------------- UI kueri */
@@ -205,12 +309,31 @@ export function AttributeQueryBuilder({ fc, schema, onResult }) {
 
   if (!fc || !schema) return <p className="gt-hint">{t('query.noData')}</p>;
 
+  const aktif = (tree.rules ?? []).length > 0;
+
   return (
     <div className="gt-query-builder">
-      <GroupEditor node={tree} schema={schema} depth={0} t={t} onChange={setTree} />
+      {/*
+        Kueri bersifat opsional, seperti Definition Query di ArcGIS: memuat
+        lapisan sudah cukup untuk melihat dan memvalidasinya. Panel penyaring
+        karena itu tertutup secara bawaan dan hanya dibuka bila diperlukan.
+      */}
+      <details className="gt-details" open={aktif}>
+        <summary>
+          {t('query.filterOptional')}
+          {aktif && <span className="gt-badge-on">{t('query.filterActive')}</span>}
+        </summary>
+        <GroupEditor node={tree} schema={schema} depth={0} t={t} onChange={setTree} />
+        {aktif && (
+          <button type="button" className="gt-linkish"
+            onClick={() => setTree(emptyGroup('AND'))}>
+            {t('query.clearFilter')}
+          </button>
+        )}
+      </details>
 
       <div className="gt-query-result">
-        <code className="gt-sql">{result?.sql}</code>
+        {aktif && <code className="gt-sql">{result?.sql}</code>}
         <p>
           <strong>{nf(result?.matched ?? 0, 0)}</strong> / {nf(result?.total ?? 0, 0)}{' '}
           {t('query.featuresMatched')}

@@ -20,6 +20,9 @@ import {
   buildMatrix, computeMetrics, computeAreaAdjusted, computeBinaryValidation, matrixToCSV,
 } from '../src/core/accuracy/confusionMatrix.js';
 import { bboxToLatLngBounds, estimateOverlaySkew } from '../src/core/geo/bounds.js';
+import {
+  detectVectorCRS, reprojectToWGS84, boundsOf, epsgFromCRSMember, epsgFromPRJ,
+} from '../src/core/vector/reproject.js';
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -531,6 +534,132 @@ t('CRS yang memerlukan proj4 ditolak dengan pesan yang bisa ditindaklanjuti', ()
   const r = bboxToLatLngBounds([100000, 200000, 110000, 210000], 23837);
   assert.equal(r.bounds, null);
   assert.match(r.error, /proj4/i);
+});
+
+console.log('\n== alur sampel ke matriks konfusi ==');
+t('titik "sesuai" menghasilkan sel diagonal', () => {
+  // Ini kontrak antara SampleSheet dan confusionMatrix: bila verdict true,
+  // kelas rujukan disamakan dengan kelas peta. Kalau kontrak ini rusak,
+  // matriksnya sunyi-sunyi salah tanpa galat apa pun.
+  const s = [
+    { predicted: 'Sawah', actual: 'Sawah', isCorrect: true, source: 'crosshair' },
+    { predicted: 'Sawah', actual: 'Sawah', isCorrect: true, source: 'gps' },
+  ];
+  const cm = buildMatrix(s);
+  const i = cm.classes.indexOf('Sawah');
+  assert.equal(cm.matrix[i][i], 2);
+  near(computeMetrics(cm).overallAccuracy, 1, 1e-12);
+});
+t('titik "tidak sesuai" mengisi sel di luar diagonal', () => {
+  const s = [
+    { predicted: 'Sawah', actual: 'Sawah', isCorrect: true },
+    { predicted: 'Sawah', actual: 'Terbangun', isCorrect: false },
+  ];
+  const cm = buildMatrix(s);
+  const r = cm.classes.indexOf('Sawah');
+  const c = cm.classes.indexOf('Terbangun');
+  assert.equal(cm.matrix[r][c], 1, 'peta Sawah, lapangan Terbangun');
+  near(computeMetrics(cm).perClass[r].usersAccuracy, 0.5, 1e-12);
+});
+t('titik crosshair dan GPS bercampur dalam satu matriks', () => {
+  // Sumber koordinat tidak boleh memengaruhi perhitungan akurasi tematik;
+  // ia hanya jejak mutu posisi.
+  const s = [
+    { predicted: 'A', actual: 'A', isCorrect: true, source: 'gps', accuracyFlagged: true },
+    { predicted: 'A', actual: 'B', isCorrect: false, source: 'crosshair' },
+    { predicted: 'B', actual: 'B', isCorrect: true, source: 'crosshair' },
+  ];
+  const m = computeMetrics(buildMatrix(s));
+  assert.equal(m.total, 3);
+  near(m.overallAccuracy, 2 / 3, 1e-12);
+});
+t('titik yang belum diisi kelas rujukannya tidak merusak matriks', () => {
+  const s = [
+    { predicted: 'A', actual: 'A', isCorrect: true },
+    { predicted: 'B', actual: '', isCorrect: false },   // rujukan kosong
+  ];
+  const cm = buildMatrix(s);
+  assert.equal(cm.skipped, 1, 'baris tanpa kelas rujukan harus dilewati, bukan dihitung');
+  assert.equal(cm.n, 1);
+});
+
+console.log('\n== CRS data vektor ==');
+const FC_UTM = { type: 'FeatureCollection', features: [{
+  type: 'Feature', properties: { nama: 'Batas' },
+  geometry: { type: 'Polygon', coordinates: [[
+    [782805, 9239000], [783200, 9239000], [783200, 9239400], [782805, 9239400], [782805, 9239000],
+  ]] },
+}] };
+
+t('koordinat UTM dikenali sebagai terproyeksi, bukan diterima diam-diam', () => {
+  const d = detectVectorCRS(FC_UTM);
+  assert.equal(d.kind, 'projected');
+  assert.equal(d.likelySouth, true, 'northing > 1e6 menandakan belahan selatan');
+});
+t('koordinat lintang-bujur dikenali sebagai geografis', () => {
+  const fc = { type: 'FeatureCollection', features: [{
+    type: 'Feature', properties: {},
+    geometry: { type: 'Point', coordinates: [107.56, -6.87] } }] };
+  assert.equal(detectVectorCRS(fc).kind, 'geographic');
+});
+t('anggota crs gaya lama terbaca dalam kedua bentuknya', () => {
+  assert.equal(epsgFromCRSMember({ crs: { properties: { name: 'EPSG:32748' } } }), 32748);
+  assert.equal(epsgFromCRSMember({
+    crs: { properties: { name: 'urn:ogc:def:crs:EPSG::32748' } } }), 32748);
+  assert.equal(epsgFromCRSMember({}), null);
+});
+t('EPSG dibaca dari .prj lewat AUTHORITY maupun nama zona', () => {
+  assert.equal(epsgFromPRJ('PROJCS["x",AUTHORITY["EPSG","32748"]]'), 32748);
+  assert.equal(epsgFromPRJ('PROJCS["WGS_1984_UTM_Zone_48S",PROJECTION["Transverse_Mercator"]]'), 32748);
+  assert.equal(epsgFromPRJ('PROJCS["WGS_1984_UTM_Zone_49N"]'), 32649);
+});
+t('reproyeksi UTM 48S menghasilkan koordinat yang cocok dengan pyproj', () => {
+  const { fc, reprojected } = reprojectToWGS84(FC_UTM, 32748);
+  assert.equal(reprojected, true);
+  const ring = fc.features[0].geometry.coordinates[0];
+  // 782805, 9239000 -> 107.558964, -6.877829 (pyproj)
+  near(ring[0][0], 107.558964, 2e-5, 'bujur');
+  near(ring[0][1], -6.877829, 2e-5, 'lintang');
+  assert.equal(ring.length, 5, 'cincin poligon harus tetap tertutup');
+});
+t('reproyeksi mempertahankan properti dan struktur geometri', () => {
+  const { fc } = reprojectToWGS84(FC_UTM, 32748);
+  assert.equal(fc.features[0].properties.nama, 'Batas');
+  assert.equal(fc.features[0].geometry.type, 'Polygon');
+  assert.equal(fc.crs, undefined, 'anggota crs harus dibuang, sesuai RFC 7946');
+});
+t('data yang sudah geografis dilewatkan tanpa diubah', () => {
+  const fc = { type: 'FeatureCollection', features: [{
+    type: 'Feature', properties: {},
+    geometry: { type: 'Point', coordinates: [107.56, -6.87] } }] };
+  const r = reprojectToWGS84(fc, 4326);
+  assert.equal(r.reprojected, false);
+  assert.equal(r.fc, fc);
+});
+t('boundsOf menghitung kotak yang benar setelah reproyeksi', () => {
+  const { fc } = reprojectToWGS84(FC_UTM, 32748);
+  const b = boundsOf(fc);
+  near(b[0][1], 107.5589, 1e-3, 'bujur barat');
+  near(b[1][0], -6.8742, 1e-3, 'lintang utara');
+});
+t('titik tunggal diberi margin supaya fitBounds tidak melompat ke zoom maksimum', () => {
+  const fc = { type: 'FeatureCollection', features: [{
+    type: 'Feature', properties: {},
+    geometry: { type: 'Point', coordinates: [107.56, -6.87] } }] };
+  const b = boundsOf(fc);
+  assert.ok(b[1][0] > b[0][0], 'kotak tidak boleh berukuran nol');
+  const tinggiM = (b[1][0] - b[0][0]) * 110540;
+  assert.ok(tinggiM > 100 && tinggiM < 1000, `margin ${tinggiM} m di luar kisaran wajar`);
+});
+t('geometri bertingkat (MultiPolygon) ikut tereproyeksi seluruhnya', () => {
+  const fc = { type: 'FeatureCollection', features: [{
+    type: 'Feature', properties: {},
+    geometry: { type: 'MultiPolygon', coordinates: [[[
+      [782805, 9239000], [783200, 9239000], [783200, 9239400], [782805, 9239000],
+    ]]] } }] };
+  const { fc: out } = reprojectToWGS84(fc, 32748);
+  const pt = out.features[0].geometry.coordinates[0][0][0];
+  assert.ok(Math.abs(pt[0]) <= 180 && Math.abs(pt[1]) <= 90, `masih terproyeksi: ${pt}`);
 });
 
 console.log(`\n${pass} lulus, ${fail} gagal\n`);

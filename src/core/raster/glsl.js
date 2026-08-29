@@ -129,6 +129,69 @@ ${nodataTests}
 }`;
 }
 
+
+/**
+ * Shader komposit RGB.
+ *
+ * MENGAPA INI PERLU ADA TERPISAH
+ * ------------------------------
+ * Kalkulator indeks memetakan satu nilai ke gradien warna. Untuk ortofoto,
+ * yang justru paling dibutuhkan adalah menampilkan citranya apa adanya —
+ * dan itu tidak dapat dinyatakan sebagai ekspresi tunggal, karena hasilnya
+ * tiga saluran, bukan satu.
+ *
+ * Peregangan dihitung per saluran. Memakai satu rentang untuk ketiganya
+ * membuat ortofoto tampak berwarna semu: pita biru pada citra udara hampir
+ * selalu punya rentang yang jauh lebih sempit daripada merah dan hijau.
+ */
+export function buildRGBFragmentShader({ hasNoData, hasAlpha }) {
+  const alphaSampler = hasAlpha ? 'uniform sampler2D u_alpha;' : '';
+  const alphaFetch = hasAlpha
+    ? '  float a = texture(u_alpha, v_uv).r;\n' +
+      '  if (a <= u_alphaCutoff) { outColor = vec4(0.0); return; }'
+    : '  float a = 1.0;';
+  const nodataTest = hasNoData
+    ? `  if (abs(r - u_nodata) < 1e-6 && abs(g - u_nodata) < 1e-6 && abs(b - u_nodata) < 1e-6) {
+    outColor = vec4(0.0); return;
+  }`
+    : '';
+
+  return `#version 300 es
+precision highp float;
+precision highp sampler2D;
+
+in vec2 v_uv;
+out vec4 outColor;
+
+uniform sampler2D u_r;
+uniform sampler2D u_g;
+uniform sampler2D u_b;
+${alphaSampler}
+uniform vec3 u_min;
+uniform vec3 u_max;
+uniform float u_nodata;
+uniform float u_opacity;
+uniform float u_alphaCutoff;
+uniform float u_gamma;
+
+void main() {
+  float r = texture(u_r, v_uv).r;
+  float g = texture(u_g, v_uv).r;
+  float b = texture(u_b, v_uv).r;
+${alphaFetch}
+${nodataTest}
+
+  vec3 v = vec3(r, g, b);
+  vec3 t = clamp((v - u_min) / max(u_max - u_min, vec3(1e-6)), 0.0, 1.0);
+  // Gamma diterapkan setelah peregangan; nilai < 1 mencerahkan bagian gelap,
+  // yang lazim diperlukan pada ortofoto berkanopi rapat.
+  t = pow(t, vec3(u_gamma));
+
+  float alpha = u_opacity;
+  outColor = vec4(t * alpha, alpha);   // alpha dikalikan di muka
+}`;
+}
+
 /* --------------------------------------------------------------- colormaps */
 
 /** Gradien warna sebagai daftar titik henti; dirender ke tekstur 1D. */

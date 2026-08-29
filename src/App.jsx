@@ -42,15 +42,20 @@ import { GPSAccuracyLayer, GPSReadout } from './components/GPSAccuracyLayer.jsx'
 import { useGeoPDF, GeoPDFLayer, GeoPDFQualityPanel } from './components/GeoPDFLayer.jsx';
 import { useGeoTIFF, RasterCalculator, RasterResultLayer } from './components/RasterCalculator.jsx';
 import {
-  useVectorFile, AttributeQueryBuilder, FilteredVectorLayer,
+  useVectorFile, AttributeQueryBuilder, FilteredVectorLayer, CRSPrompt,
 } from './components/AttributeQueryBuilder.jsx';
+import { LayerPanel } from './components/LayerPanel.jsx';
+import { boundsOf } from './core/vector/reproject.js';
 import { DrawingTools, DrawingPanel, ExportButton } from './components/DrawingTools.jsx';
-import { forwardUTM, utmZoneFromLon } from './core/geo/projection.js';
+import {
+  MapBridge, CenterTracker, CrosshairOverlay, SamplingBar, SampleSheet,
+  SampleMarkers, toUTM,
+} from './components/Sampling.jsx';
 import {
   buildMatrix, computeMetrics, computeBinaryValidation, matrixToCSV,
 } from './core/accuracy/confusionMatrix.js';
 
-const TABS = ['map', 'raster', 'query', 'accuracy', 'settings'];
+const TABS = ['map', 'layers', 'raster', 'query', 'accuracy', 'settings'];
 
 function Workspace() {
   const { t, nf, toggle: toggleLocale } = useLocale();
@@ -69,6 +74,13 @@ function Workspace() {
 
   // Jembatan dari panel samping ke kendali digitasi yang hidup di dalam peta.
   const drawControls = useRef(null);
+  const mapRef = useRef(null);
+
+  const [sampleMode, setSampleMode] = useState('crosshair');
+  // Visibilitas dan transparansi per lapisan, dikelola satu tempat.
+  const [layerState, setLayerState] = useState({});
+  const [center, setCenter] = useState(null);
+  const [draft, setDraft] = useState(null);      // titik menunggu diisi kelasnya
 
   const geo = useGeolocation({ toleranceMeters: 15 });
   const pdf = useGeoPDF();
@@ -77,32 +89,159 @@ function Workspace() {
 
   // Koordinat UTM dari fix GPS — ditampilkan berdampingan dengan lat/lon karena
   // sebagian besar data lapangan di Indonesia dikelola dalam UTM.
-  const utm = useMemo(() => {
-    const p = geo.position;
-    if (!p) return null;
-    const zone = utmZoneFromLon(p.lon);
-    const r = forwardUTM(p.lat, p.lon, { zone, south: p.lat < 0 });
-    return { ...r, label: `UTM ${zone}${p.lat < 0 ? 'S' : 'N'}` };
-  }, [geo.position]);
+  const utm = useMemo(
+    () => (geo.position ? toUTM(geo.position.lat, geo.position.lon) : null),
+    [geo.position]
+  );
+  const centerUTM = useMemo(
+    () => (center ? toUTM(center.lat, center.lon) : null),
+    [center]
+  );
+
+  // Kelas yang pernah dipakai, untuk saran ketik pada formulir.
+  const knownClasses = useMemo(() => {
+    const set = new Set();
+    for (const s of samples) {
+      if (s.predicted) set.add(s.predicted);
+      if (s.actual) set.add(s.actual);
+    }
+    return [...set].sort();
+  }, [samples]);
 
   /* ---------------------------------------------------- perekaman sampel */
 
-  const recordSample = useCallback((verdict, predictedClass, actualClass) => {
-    const p = geo.position;
-    if (!p) return;
+  /**
+   * Menempatkan titik, lalu membuka formulir. Koordinatnya dibekukan di sini
+   * supaya peta boleh digeser sementara formulir terbuka tanpa memindahkan
+   * titik yang sudah ditempatkan.
+   */
+  const capture = useCallback((mode) => {
+    if (mode === 'gps') {
+      const p = geo.position;
+      if (!p) return;
+      setDraft({
+        lat: p.lat, lon: p.lon, source: 'gps', accuracy: p.accuracy,
+        utm: toUTM(p.lat, p.lon),
+        lastPredicted: samples[samples.length - 1]?.predicted,
+      });
+      return;
+    }
+    const c = center ?? (mapRef.current ? mapRef.current.getCenter() : null);
+    if (!c) return;
+    const lat = c.lat, lon = c.lon ?? c.lng;
+    setDraft({
+      lat, lon, source: 'crosshair', accuracy: null,
+      utm: toUTM(lat, lon),
+      lastPredicted: samples[samples.length - 1]?.predicted,
+    });
+  }, [geo.position, center, samples]);
+
+  const saveSample = useCallback((data) => {
     setSamples((prev) => [...prev, {
-      id: `s${Date.now()}`,
-      lat: p.lat, lon: p.lon,
-      accuracy: p.accuracy,
-      // Jejak mutu ikut disimpan: saat menulis laporan, pertanyaan pertama
-      // reviewer adalah seberapa teliti posisi sampelnya.
-      accuracyFlagged: p.accuracy > geo.toleranceMeters,
-      predicted: predictedClass,
-      actual: verdict ? predictedClass : actualClass,
-      isCorrect: verdict,
+      id: `s${Date.now()}${Math.random().toString(36).slice(2, 5)}`,
+      ...data,
+      // Jejak mutu ikut disimpan: pertanyaan pertama reviewer adalah seberapa
+      // teliti posisi sampelnya, dan jawabannya berbeda untuk tiap sumber.
+      accuracyFlagged: data.source === 'gps' && data.accuracy > geo.toleranceMeters,
       timestamp: new Date().toISOString(),
     }]);
-  }, [geo.position, geo.toleranceMeters, setSamples]);
+    setDraft(null);
+  }, [setSamples, geo.toleranceMeters]);
+
+  const deleteSample = useCallback((id) => {
+    setSamples((prev) => prev.filter((s) => s.id !== id));
+  }, [setSamples]);
+
+  /* ------------------------------------------------------- daftar lapisan */
+
+  /**
+   * Menyatukan seluruh lapisan dari sumber yang berbeda ke satu daftar.
+   * Dihitung ulang hanya bila salah satu sumbernya berubah, bukan tiap render.
+   */
+  const layers = useMemo(() => {
+    const st = (id, def = {}) => ({ visible: true, opacity: 1, ...def, ...(layerState[id] ?? {}) });
+    const out = [];
+
+    if (pdf.doc) {
+      out.push({
+        id: 'geopdf', kind: 'geopdf',
+        name: pdf.doc.meta?.name ?? 'GeoPDF',
+        bounds: pdf.doc.bounds,
+        note: pdf.doc.viewport.crs.kind === 'utm'
+          ? `UTM ${pdf.doc.viewport.crs.zone}${pdf.doc.viewport.crs.south ? 'S' : 'N'}`
+          : undefined,
+        ...st('geopdf'),
+      });
+    }
+    if (rasterResult) {
+      out.push({
+        id: 'raster', kind: 'raster',
+        name: rasterResult.mode === 'rgb' ? 'Raster — RGB' : `Raster — ${rasterResult.expression}`,
+        bounds: rasterGeom?.ok ? rasterGeom.bounds ?? null : null,
+        note: rasterGeom?.reprojected ? `EPSG:${tiff.data?.epsg}` : undefined,
+        ...st('raster', { opacity: 0.85 }),
+      });
+    }
+    if (vector.fc) {
+      out.push({
+        id: 'vector', kind: 'vector',
+        name: vector.name ?? 'Vektor',
+        bounds: vector.bounds,
+        count: vector.fc.features.length,
+        note: vector.crs?.reprojected
+          ? t('vector.reprojected', { epsg: vector.crs.epsg })
+          : undefined,
+        ...st('vector'),
+      });
+    }
+    if (samples.length) {
+      out.push({
+        id: 'samples', kind: 'samples',
+        name: t('nav.accuracy'),
+        count: samples.length,
+        bounds: boundsOf({
+          features: samples.map((x) => ({
+            geometry: { type: 'Point', coordinates: [x.lon, x.lat] },
+          })),
+        }),
+        removable: false,
+        ...st('samples'),
+      });
+    }
+    if (drawnFeatures?.features?.length) {
+      out.push({
+        id: 'drawing', kind: 'drawing',
+        name: t('nav.map'),
+        count: drawnFeatures.features.length,
+        bounds: boundsOf(drawnFeatures),
+        removable: false,
+        ...st('drawing'),
+      });
+    }
+    return out;
+  }, [pdf.doc, rasterResult, rasterGeom, vector.fc, vector.bounds, vector.crs,
+      vector.name, samples, drawnFeatures, layerState, tiff.data, t]);
+
+  const vis = useCallback((id) => layerState[id]?.visible !== false, [layerState]);
+  const opac = useCallback(
+    (id, def = 1) => layerState[id]?.opacity ?? def, [layerState]);
+
+  const updateLayer = useCallback((id, patch) => {
+    setLayerState((prev) => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } }));
+  }, []);
+
+  /** Zoom peta ke kotak pembatas lapisan. */
+  const zoomTo = useCallback((bounds) => {
+    if (!bounds || !mapRef.current) return;
+    mapRef.current.fitBounds(bounds, { padding: [24, 24], maxZoom: 21 });
+  }, []);
+
+  const removeLayer = useCallback((id) => {
+    if (id === 'vector') vector.clear();
+    if (id === 'raster') setRasterResult(null);
+    if (id === 'geopdf') window.location.reload();   // GeoPDF terikat ke berkas terunggah
+    setLayerState((prev) => { const n = { ...prev }; delete n[id]; return n; });
+  }, [vector]);
 
   /* ------------------------------------------------------------- metrik */
 
@@ -194,6 +333,15 @@ function Workspace() {
               </>
             )}
 
+            {tab === 'layers' && (
+              <LayerPanel
+                layers={layers}
+                onChange={updateLayer}
+                onZoom={zoomTo}
+                onRemove={removeLayer}
+              />
+            )}
+
             {tab === 'raster' && (
               <>
                 <label className="gt-field">
@@ -240,12 +388,32 @@ function Workspace() {
                     onChange={(e) => e.target.files.length && vector.load(e.target.files)} />
                 </label>
                 {vector.status === 'error' && <p className="gt-gps-alert">{vector.error}</p>}
-                <div className="gt-seg">
-                  {['dim', 'hide'].map((m) => (
-                    <button key={m} type="button" className={filterMode === m ? 'is-on' : ''}
-                      onClick={() => setFilterMode(m)}>{m === 'dim' ? 'Redupkan' : 'Sembunyikan'}</button>
-                  ))}
-                </div>
+
+                <CRSPrompt vector={vector} onPick={vector.applyCRS} />
+
+                {vector.fc && (
+                  <>
+                    <div className="gt-row">
+                      <button type="button" onClick={() => zoomTo(vector.bounds)}>
+                        ⤢ {t('layers.zoomTo')}
+                      </button>
+                      <div className="gt-seg">
+                        {['dim', 'hide'].map((m) => (
+                          <button key={m} type="button" className={filterMode === m ? 'is-on' : ''}
+                            onClick={() => setFilterMode(m)}>
+                            {m === 'dim' ? 'Redupkan' : 'Sembunyikan'}
+                          </button>
+                        ))}
+                      </div>
+                    </div>
+                    {vector.crs?.reprojected && (
+                      <p className="gt-hint">
+                        {t('vector.reprojected', { epsg: vector.crs.epsg })}
+                      </p>
+                    )}
+                  </>
+                )}
+
                 <AttributeQueryBuilder fc={vector.fc} schema={vector.schema} onResult={setQueryResult} />
               </>
             )}
@@ -282,13 +450,17 @@ function Workspace() {
             <ActiveBasemap basemapId={basemap} />
             <ScaleControl position="bottomleft" imperial={false} />
             <InvalidateOnResize deps={[tab]} />
+            <MapBridge mapRef={mapRef} />
+            <CenterTracker onCenter={setCenter} />
 
-            {pdf.doc && <GeoPDFLayer doc={pdf.doc} opacity={pdfOpacity} />}
-            {rasterResult && (
-              <RasterResultLayer result={rasterResult} opacity={0.85}
+            {pdf.doc && vis('geopdf') && (
+              <GeoPDFLayer doc={pdf.doc} opacity={opac('geopdf', pdfOpacity)} />
+            )}
+            {rasterResult && vis('raster') && (
+              <RasterResultLayer result={rasterResult} opacity={opac('raster', 0.85)}
                 onGeometryInfo={setRasterGeom} />
             )}
-            {vector.fc && (
+            {vector.fc && vis('vector') && (
               <FilteredVectorLayer
                 fc={vector.fc}
                 mask={queryResult?.mask}
@@ -296,53 +468,34 @@ function Workspace() {
               />
             )}
 
+            {vis('samples') && <SampleMarkers samples={samples} onDelete={deleteSample} />}
             <GPSAccuracyLayer geo={geo} follow={follow} onFollowBreak={() => setFollow(false)} />
 
             {/* Wajib di dalam MapContainer: memanggil useMap(). */}
             <DrawingTools onChange={setDrawnFeatures} controlsRef={drawControls} />
           </MapContainer>
 
-          <ValidationSwitch
-            disabled={!geo.safeToSample}
-            warning={!geo.safeToSample && geo.status === 'active'}
-            onRecord={recordSample}
-            t={t}
+          <CrosshairOverlay
+            active={sampleMode === 'crosshair' && !draft}
+            center={center}
+            utm={centerUTM}
+          />
+
+          <SamplingBar
+            mode={sampleMode}
+            onModeChange={setSampleMode}
+            onCapture={capture}
+            geo={geo}
+          />
+
+          <SampleSheet
+            draft={draft}
+            knownClasses={knownClasses}
+            onSave={saveSample}
+            onCancel={() => setDraft(null)}
           />
         </main>
       </div>
-    </div>
-  );
-}
-
-/**
- * Sakelar validasi biner.
- * Dinonaktifkan ketika akurasi GPS di luar toleransi — mencegah bias pada
- * sumbernya, bukan sekadar menandainya setelah terjadi.
- */
-function ValidationSwitch({ disabled, warning, onRecord, t }) {
-  const [predicted, setPredicted] = useState('');
-  const [actual, setActual] = useState('');
-
-  return (
-    <div className={`gt-validation${warning ? ' is-warning' : ''}`}>
-      <p className="gt-validation-q">{t('validation.question')}</p>
-      <div className="gt-row">
-        <input placeholder="Kelas peta" value={predicted}
-          onChange={(e) => setPredicted(e.target.value)} />
-        <input placeholder="Kelas lapangan (bila berbeda)" value={actual}
-          onChange={(e) => setActual(e.target.value)} />
-      </div>
-      <div className="gt-validation-buttons">
-        <button type="button" className="gt-btn-true" disabled={disabled || !predicted}
-          onClick={() => onRecord(true, predicted, predicted)}>
-          ✓ {t('validation.truth')}
-        </button>
-        <button type="button" className="gt-btn-false" disabled={disabled || !predicted}
-          onClick={() => onRecord(false, predicted, actual || 'Lainnya')}>
-          ✕ {t('validation.false')}
-        </button>
-      </div>
-      {disabled && <p className="gt-hint">{t('gps.overTolerance', { acc: '—', tol: 15 })}</p>}
     </div>
   );
 }

@@ -66,8 +66,12 @@ export function ThemeProvider({ children }) {
     setMode,
     followTheme,
     setFollowTheme,
-    /** Basemap yang disarankan untuk tema aktif. */
-    suggestedBasemap: mode === 'dark' ? 'carto-dark' : 'osm',
+    /**
+     * Basemap yang disarankan untuk tema aktif.
+     * Keduanya bebas API key — Carto dipindahkan ke daftar yang perlu ditinjau
+     * sejak endpoint rasternya mewajibkan kunci.
+     */
+    suggestedBasemap: mode === 'dark' ? 'esri-dark' : 'osm',
   }), [mode, followTheme]);
 
   return <ThemeContext.Provider value={value}>{children}</ThemeContext.Provider>;

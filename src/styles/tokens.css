@@ -138,3 +138,110 @@ body { margin: 0; background: var(--bg); color: var(--text);
   .gt-rule select, .gt-rule input, .gt-seg button { min-height: 40px; }
   .gt-icon-btn { min-width: 40px; min-height: 40px; }
 }
+
+/* ================= perekaman titik: bidik silang & lembar isian ============ */
+
+/* Bidik silang tetap di tengah layar peta. pointer-events dimatikan supaya
+   seluruh gerakan sentuh tetap sampai ke peta di bawahnya. */
+.gt-crosshair { position: absolute; inset: 0; z-index: 450;
+  display: grid; place-items: center; pointer-events: none; }
+.gt-crosshair-mark { width: 72px; height: 72px; }
+.gt-ch-ring { fill: none; stroke: var(--accent); stroke-width: 2; opacity: .55; }
+.gt-ch-arm  { stroke: var(--accent); stroke-width: 3; stroke-linecap: round; }
+.gt-ch-dot  { fill: var(--accent); }
+.gt-crosshair-readout { position: absolute; top: calc(50% + 46px);
+  background: rgba(12,21,18,.82); color: #edf3ea; font-size: 11px;
+  padding: 3px 8px; border-radius: 6px; white-space: nowrap; }
+
+/* Bilah perekam menempel di tepi bawah peta, tidak menutupi bagian tengah. */
+.gt-sampling-bar { position: absolute; left: 50%; transform: translateX(-50%);
+  bottom: calc(12px + env(safe-area-inset-bottom)); z-index: 500;
+  width: min(520px, calc(100% - 20px));
+  display: flex; flex-direction: column; gap: 8px; align-items: stretch; }
+.gt-mode-seg { align-self: center; background: var(--bg); }
+.gt-capture { border: 0; border-radius: 12px; padding: 14px;
+  background: var(--accent); color: #fff; font-weight: 700; font-size: 15px;
+  cursor: pointer; box-shadow: 0 6px 20px rgba(0,0,0,.35); }
+.gt-capture:disabled { opacity: .45; cursor: not-allowed; }
+.gt-sampling-note { margin: 0; text-align: center; font-size: 11.5px;
+  color: var(--warn); background: var(--bg); border: 1px solid var(--line);
+  border-radius: 8px; padding: 6px 10px; }
+.gt-linkish { border: 0; background: none; color: var(--accent);
+  font-weight: 700; text-decoration: underline; cursor: pointer;
+  padding: 0 0 0 6px; font-size: 11.5px; }
+
+/* Lembar isian: muncul dari bawah, hanya saat merekam. */
+.gt-sheet-backdrop { position: fixed; inset: 0; z-index: 1000;
+  background: rgba(0,0,0,.45); display: flex; align-items: flex-end;
+  justify-content: center; }
+.gt-sheet { width: min(520px, 100%); max-height: 88dvh; overflow-y: auto;
+  background: var(--bg); border: 1px solid var(--line);
+  border-radius: 16px 16px 0 0; padding: 8px 16px
+    calc(16px + env(safe-area-inset-bottom)); }
+.gt-sheet-grip { width: 40px; height: 4px; border-radius: 2px;
+  background: var(--line); margin: 4px auto 10px; }
+.gt-sheet-head { display: flex; justify-content: space-between;
+  align-items: center; gap: 10px; }
+.gt-sheet-head h3 { margin: 0; font-size: 17px; }
+.gt-source-tag { font-size: 11px; font-weight: 700; padding: 3px 9px;
+  border-radius: 999px; border: 1px solid var(--line); color: var(--muted); }
+.gt-source-tag.is-crosshair { color: var(--accent); border-color: var(--accent); }
+.gt-sheet-coord { font-size: 11.5px; color: var(--muted); margin: 6px 0 12px; }
+.gt-sheet-q { margin: 14px 0 8px; font-weight: 600; font-size: 13.5px; }
+.gt-field { display: block; margin-bottom: 12px; font-size: 12px;
+  color: var(--muted); }
+.gt-field input, .gt-field select { display: block; width: 100%; margin-top: 5px;
+  padding: 11px; font-size: 15px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.gt-btn-true.is-on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--ok) 45%, transparent); }
+.gt-btn-false.is-on { box-shadow: 0 0 0 3px color-mix(in srgb, var(--bad) 45%, transparent); }
+.gt-sheet-actions { display: flex; gap: 10px; margin-top: 16px; }
+.gt-sheet-actions button { flex: 1; padding: 12px; border-radius: 10px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  font-weight: 700; cursor: pointer; }
+.gt-sheet-actions .gt-btn-primary { border: 0; margin-top: 0; }
+
+/* Penanda titik yang sudah direkam. */
+.gt-sample-pin { width: 22px; height: 22px; border-radius: 50%;
+  display: grid; place-items: center; font-size: 12px; font-weight: 700;
+  color: #fff; border: 2px solid #fff; box-shadow: 0 1px 4px rgba(0,0,0,.5); }
+.gt-sample-pin.is-true  { background: var(--ok); }
+.gt-sample-pin.is-false { background: var(--bad); }
+/* Titik dari crosshair diberi garis putus supaya sumbernya terbaca di peta. */
+.gt-sample-pin.src-crosshair { border-style: dashed; }
+
+/* ======================= panel lapisan & pemetaan pita ===================== */
+.gt-layers-title { margin: 0 0 10px; font-size: 13px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .06em; }
+.gt-layer { border: 1px solid var(--line); border-radius: 10px;
+  padding: 9px 10px; margin-bottom: 8px; background: var(--bg); }
+.gt-layer.is-hidden { opacity: .5; }
+.gt-layer-row { display: flex; align-items: center; gap: 6px; }
+.gt-layer-check { display: flex; align-items: center; gap: 8px; flex: 1;
+  min-width: 0; cursor: pointer; }
+.gt-layer-name { font-size: 13px; font-weight: 600; overflow: hidden;
+  text-overflow: ellipsis; white-space: nowrap; }
+.gt-layer-meta { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 5px;
+  font-size: 11px; color: var(--muted); }
+.gt-layer-kind { border: 1px solid var(--line); border-radius: 999px;
+  padding: 1px 8px; }
+.gt-layer-note { color: var(--ok); }
+.gt-layer-opacity { width: 100%; margin-top: 8px; }
+.gt-icon-btn { border: 1px solid var(--line); background: var(--panel);
+  color: var(--text); border-radius: 8px; min-width: 32px; min-height: 32px;
+  cursor: pointer; font-size: 15px; line-height: 1; }
+.gt-icon-btn:disabled { opacity: .35; cursor: not-allowed; }
+
+.gt-full-seg { display: flex; width: 100%; margin-bottom: 10px; }
+.gt-full-seg button { flex: 1; padding: 9px 6px; font-size: 12.5px; font-weight: 600; }
+.gt-band-map { display: grid; grid-template-columns: repeat(2, 1fr);
+  gap: 8px; margin: 8px 0; }
+.gt-band-map label { display: flex; align-items: center; gap: 6px; font-size: 12px; }
+.gt-band-map select { flex: 1; padding: 6px; border-radius: 7px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text); }
+.gt-details > summary { cursor: pointer; font-size: 12.5px; font-weight: 600;
+  padding: 7px 0; color: var(--text); }
+.gt-badge-on { margin-left: 8px; font-size: 10px; font-weight: 700;
+  color: #fff; background: var(--accent); border-radius: 999px; padding: 1px 7px; }
+.gt-crs-prompt { border: 1px solid var(--warn); border-radius: 10px;
+  padding: 12px; margin: 10px 0; }

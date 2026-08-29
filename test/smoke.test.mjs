@@ -35,19 +35,25 @@ console.log('\n== penempatan komponen peta ==');
 const app = readFileSync(new URL('../src/App.jsx', import.meta.url), 'utf8');
 
 // Komponen mana saja yang memanggil useMap()?
+const HOOK_RE = /\buse(Map|MapEvents?)\s*\(/;
+
 const compDir = new URL('../src/components/', import.meta.url);
 const usesMap = new Set();
 for (const f of readdirSync(compDir)) {
   if (!f.endsWith('.jsx')) continue;
   const src = readFileSync(new URL(f, compDir), 'utf8');
-  if (!/\buseMap\s*\(/.test(src)) continue;
+  // useMapEvents dan useMapEvent juga memerlukan konteks MapContainer;
+  // memindai useMap saja meninggalkan celah yang persis sejenis.
+  if (!HOOK_RE.test(src)) continue;
+  HOOK_RE.lastIndex = 0;
   // Ambil nama komponen yang diekspor dari berkas itu
   for (const m of src.matchAll(/export function (\w+)/g)) {
     // Hanya yang benar-benar memanggil useMap di dalam badannya
     const start = m.index;
     const next = src.indexOf('\nexport function', start + 1);
     const body = src.slice(start, next === -1 ? undefined : next);
-    if (/\buseMap\s*\(/.test(body)) usesMap.add(m[1]);
+    HOOK_RE.lastIndex = 0;
+    if (HOOK_RE.test(body)) usesMap.add(m[1]);
   }
 }
 
