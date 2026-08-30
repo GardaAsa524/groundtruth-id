@@ -1,11 +1,31 @@
-# GroundTruth.id — Arsitektur Ekstensi Analitik
+# REIS — Remote Sensing Evaluation & Inspection Survey
+
+Arsitektur aplikasi. MangGIS.co.
 
 Dokumen ini menjelaskan rancangan lima modul baru dan alasan teknis di balik
 setiap keputusan yang tidak jelas dari kodenya sendiri.
 
-Seluruh logika inti diuji di Node: `npm test` menjalankan 77 uji yang mencakup
-proyeksi, pencocokan affine, reproyeksi bbox, parser ekspresi, evaluator,
-kueri atribut, metrik akurasi, dan pemasangan nyata antarmuka di jsdom.
+Seluruh logika inti diuji di Node: `npm test` menjalankan 103 uji yang mencakup
+proyeksi, pencocokan affine, reproyeksi bbox dan vektor, kueri atribut,
+pewarnaan kelas, metrik akurasi, kesahihan berkas ekspor, dan pemasangan nyata
+antarmuka di jsdom.
+
+## Yang dihapus, dan alasannya
+
+Modul kalkulator raster (GeoTIFF, WebGL, aljabar peta) dan dukungan Shapefile
+**dikeluarkan** dari versi ini atas permintaan pengguna, dengan alasan yang
+tepat:
+
+- **Raster GeoTIFF** menuntut memori besar di ponsel dan sering gagal, sementara
+  kebutuhan menampilkan citra sudah dipenuhi GeoPDF yang bekerja luring dan
+  jauh lebih ringan. Menghapusnya membuang dependensi `geotiff` dan seluruh
+  jalur WebGL.
+- **Shapefile** terdiri dari beberapa berkas yang harus dipilih bersamaan.
+  Di peramban ponsel, pemilih berkas ganda tidak dapat diandalkan, dan pengguna
+  sering hanya membawa `.shp` tanpa `.dbf`. GeoJSON satu berkas dan selalu
+  membawa atributnya.
+
+Kode yang dihapus tetap ada di arsip versi sebelumnya bila kelak diperlukan.
 
 ### Mengapa ada uji pemasangan (test/smoke.test.mjs)
 
@@ -139,7 +159,36 @@ tidak ikut tampil.
 
 ---
 
-## 2. Kalkulator raster
+## 2. Ekspor: KMZ, GeoJSON, dan XLSX
+
+Ketiganya ditulis dari nol, tanpa JSZip maupun SheetJS. Alasannya sederhana:
+KMZ dan XLSX keduanya arsip ZIP, dan penulis ZIP metode "store" hanya 120 baris.
+Menambah ~200 kB pustaka ke bundel yang diunduh setiap surveyor, demi dua jenis
+keluaran, tidak sepadan.
+
+**KMZ, bukan KML, ketika ada foto.** KML adalah XML tunggal dan tidak dapat
+memuat gambar. Menyisipkan foto sebagai data URI di balon tampak menggoda,
+tetapi Google Earth Pro membatasi ukuran balon dan sebagian versinya menolak
+skema `data:` — hasilnya balon kosong tanpa pesan galat. KMZ menyelesaikannya
+dengan benar: arsip berisi `doc.kml` ditambah folder `files/`, dirujuk dengan
+jalur relatif.
+
+**Foto tidak masuk GeoJSON.** Satu foto terkompresi 200-400 kB sebagai base64;
+seratus titik menghasilkan berkas puluhan megabita yang menolak dibuka di QGIS.
+Untuk foto, KMZ adalah jalurnya.
+
+**XLSX, bukan CSV, untuk tabel akurasi.** CSV kehilangan tipe data: 0,8667
+terbaca sebagai teks bila pemisah desimal mesin berbeda. Untuk angka yang akan
+dihitung ulang atau digrafikkan, itu masalah nyata. XLSX juga memuat tiga
+lembar sekaligus — matriks, metrik, dan daftar titik mentah adalah tiga tabel
+berbentuk berbeda.
+
+Kesahihannya tidak diklaim, melainkan diuji: `test/export.test.mjs` memuat
+pembaca ZIP mandiri yang membongkar ulang arsip hasil dan memeriksa CRC setiap
+entri, struktur XML KML, header OOXML, serta bahwa angka benar-benar tersimpan
+sebagai `<v>` numerik dan bukan teks.
+
+## 3. Kalkulator raster (dihapus pada versi ini)
 
 ### Parser, bukan `new Function`
 

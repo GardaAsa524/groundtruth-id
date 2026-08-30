@@ -11,7 +11,7 @@ import { VitePWA } from 'vite-plugin-pwa';
  * Ubah baris ini bila nama repo Anda berbeda. Jadikan '/' bila dipasang di
  * domain sendiri, Netlify, atau Vercel.
  */
-const REPO = '/groundtruth-id/';
+const REPO = '/groundtruth-id/';   // sesuaikan bila nama repo berbeda
 
 export default defineConfig(({ command }) => ({
   // Saat `npm run dev`, base harus '/' agar server pengembangan bekerja normal.
@@ -24,9 +24,9 @@ export default defineConfig(({ command }) => ({
       includeAssets: ['apple-touch-icon.png'],
 
       manifest: {
-        name: 'GroundTruth.id — Survei & Uji Akurasi Spasial',
-        short_name: 'GroundTruth',
-        description: 'Platform survei lapangan dan uji akurasi data spasial oleh MangGIS.co',
+        name: 'REIS — Remote Sensing Evaluation & Inspection Survey',
+        short_name: 'REIS',
+        description: 'Survei lapangan dan uji akurasi pengindraan jauh oleh MangGIS.co',
         lang: 'id',
         start_url: REPO,
         scope: REPO,
@@ -91,8 +91,7 @@ export default defineConfig(({ command }) => ({
         manualChunks: {
           'vendor-map': ['leaflet', 'react-leaflet'],
           'vendor-pdf': ['pdf-lib', 'pdfjs-dist'],
-          'vendor-raster': ['geotiff'],
-          'vendor-vector': ['shpjs', 'proj4'],
+          'vendor-proj': ['proj4'],
         },
       },
     },

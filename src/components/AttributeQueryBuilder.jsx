@@ -25,6 +25,9 @@ import {
 import {
   detectVectorCRS, reprojectToWGS84, boundsOf, epsgFromPRJ, utmZoneCandidates,
 } from '../core/vector/reproject.js';
+import {
+  uniqueValues, buildColorMap, styleFor, legendEntries, PALETTE,
+} from '../core/vector/style.js';
 import { useLocale } from '../context/AppProviders.jsx';
 
 /* --------------------------------------------------------------- pemuatan */
@@ -372,12 +375,76 @@ export function AttributeQueryBuilder({ fc, schema, onResult }) {
   );
 }
 
+/* ----------------------------------------------------------- simbologi kelas */
+
+/**
+ * Pengaturan pewarnaan berdasarkan nilai atribut.
+ * Padanan "Unique Values" di ArcGIS: pilih kolom, tiap nilai dapat warnanya.
+ */
+export function SymbologyPanel({ fc, schema, value, onChange }) {
+  const { t, nf } = useLocale();
+  const { field, colors } = value ?? { field: '', colors: {} };
+
+  const entries = useMemo(
+    () => (field ? legendEntries(fc, field, colors) : []),
+    [fc, field, colors]
+  );
+
+  const pickField = (f) => {
+    if (!f) { onChange({ field: '', colors: {} }); return; }
+    // Warna dibangun sekali saat kolom dipilih, lalu disimpan. Menghitungnya
+    // ulang tiap render membuat warna berkedip saat pengguna mengubah filter.
+    onChange({ field: f, colors: buildColorMap(uniqueValues(fc, f)) });
+  };
+
+  // Kolom kategorikal saja: mewarnai kolom angka kontinu menghasilkan ratusan
+  // kategori dan legenda yang tidak terbaca.
+  const kandidat = (schema ?? []).filter(
+    (f) => f.categories || f.type === 'boolean' || (f.type === 'string')
+  );
+
+  return (
+    <div className="gt-symbology">
+      <label className="gt-field">
+        {t('symbology.field')}
+        <select value={field} onChange={(e) => pickField(e.target.value)}>
+          <option value="">{t('symbology.single')}</option>
+          {kandidat.map((f) => (
+            <option key={f.name} value={f.name}>
+              {f.name}{f.categories ? ` (${f.categories.length})` : ''}
+            </option>
+          ))}
+        </select>
+      </label>
+
+      {entries.length > 0 && (
+        <>
+          <div className="gt-legend">
+            {entries.map((e) => (
+              <div key={e.value} className="gt-legend-row">
+                <input type="color" value={e.color}
+                  aria-label={`${t('symbology.color')} ${e.label}`}
+                  onChange={(ev) => onChange({
+                    field, colors: { ...colors, [e.value]: ev.target.value },
+                  })} />
+                <span className="gt-legend-label" title={e.label}>{e.label}</span>
+                <span className="mono gt-legend-count">{nf(e.count, 0)}</span>
+              </div>
+            ))}
+          </div>
+          <button type="button" className="gt-linkish"
+            onClick={() => onChange({ field, colors: buildColorMap(uniqueValues(fc, field)) })}>
+            {t('symbology.reset')}
+          </button>
+        </>
+      )}
+    </div>
+  );
+}
+
 /* ------------------------------------------------------- lapisan terfilter */
 
-const STYLE_MATCH = { color: '#ff2e88', weight: 2, opacity: 0.95, fillColor: '#ff2e88', fillOpacity: 0.18 };
-const STYLE_DIM = { color: '#8a99908c', weight: 1, opacity: 0.25, fillColor: '#8a9990', fillOpacity: 0.04 };
-
-export function FilteredVectorLayer({ fc, mask, mode = 'dim', onFeatureClick }) {
+export function FilteredVectorLayer({ fc, mask, mode = 'dim', symbology, onFeatureClick }) {
   const map = useMap();
   const layerRef = useRef(null);
   const indexRef = useRef(new Map());   // index fitur -> layer Leaflet
@@ -392,7 +459,7 @@ export function FilteredVectorLayer({ fc, mask, mode = 'dim', onFeatureClick }) 
       // Kanvas untuk cacah fitur besar; SVG di bawah ambang itu tetap lebih
       // tajam dan mendukung hover dengan lebih baik.
       renderer: fc.features.length > 4000 ? L.canvas({ padding: 0.5 }) : L.svg({ padding: 0.5 }),
-      style: () => STYLE_MATCH,
+      style: (feat) => styleFor(feat.properties, symbology),
       pointToLayer: (feat, latlng) => L.circleMarker(latlng, { radius: 5 }),
       onEachFeature: (feature, lyr) => {
         indexRef.current.set(i, lyr);
@@ -408,26 +475,27 @@ export function FilteredVectorLayer({ fc, mask, mode = 'dim', onFeatureClick }) 
     return () => { map.removeLayer(layer); layerRef.current = null; indexRef.current.clear(); };
   }, [fc, map]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  // Terapkan mask tanpa membangun ulang apa pun.
+  // Terapkan mask dan simbologi tanpa membangun ulang apa pun.
   useEffect(() => {
     const idx = indexRef.current;
-    if (!idx.size) return;
-    if (!mask) {
-      idx.forEach((lyr) => lyr.setStyle?.(STYLE_MATCH));
-      return;
-    }
+    if (!idx.size || !fc) return;
+    const feats = fc.features;
+
     idx.forEach((lyr, i) => {
-      const on = mask[i] === 1;
-      if (mode === 'hide') {
-        // Menyembunyikan lewat gaya, bukan removeLayer: menambah/menghapus
-        // ribuan layer memicu perhitungan ulang indeks spasial Leaflet.
-        lyr.setStyle?.(on ? STYLE_MATCH : { opacity: 0, fillOpacity: 0 });
-        if (lyr._path) lyr._path.style.pointerEvents = on ? '' : 'none';
-      } else {
-        lyr.setStyle?.(on ? STYLE_MATCH : STYLE_DIM);
+      const on = !mask || mask[i] === 1;
+      const props = feats[i]?.properties;
+
+      if (!on && mode === 'hide') {
+        // Disembunyikan lewat gaya, bukan removeLayer: menambah dan menghapus
+        // ribuan layer memaksa Leaflet menghitung ulang indeks spasialnya.
+        lyr.setStyle?.({ opacity: 0, fillOpacity: 0 });
+        if (lyr._path) lyr._path.style.pointerEvents = 'none';
+        return;
       }
+      if (lyr._path) lyr._path.style.pointerEvents = '';
+      lyr.setStyle?.(styleFor(props, { ...symbology, dimmed: !on }));
     });
-  }, [mask, mode]);
+  }, [mask, mode, symbology, fc]);
 
   return null;
 }

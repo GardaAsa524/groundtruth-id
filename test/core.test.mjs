@@ -10,9 +10,6 @@ import {
 } from '../src/core/geo/projection.js';
 import { fitAffine, apply, invert, compose } from '../src/core/geo/affine.js';
 import { buildGeoref, userToCanvasMatrix, chooseRenderScale } from '../src/core/geopdf/georefModel.js';
-import { parseExpression, evaluate, INDEX_PRESETS } from '../src/core/raster/expression.js';
-import { emitGLSL } from '../src/core/raster/glsl.js';
-import { sampleStats, planWorkingSize } from '../src/core/raster/renderer.js';
 import {
   inferSchema, compileQuery, applyQuery, queryToSQL, summarizeField, FIELD_TYPES,
 } from '../src/core/vector/query.js';
@@ -23,6 +20,9 @@ import { bboxToLatLngBounds, estimateOverlaySkew } from '../src/core/geo/bounds.
 import {
   detectVectorCRS, reprojectToWGS84, boundsOf, epsgFromCRSMember, epsgFromPRJ,
 } from '../src/core/vector/reproject.js';
+import {
+  uniqueValues, buildColorMap, styleFor, legendEntries, PALETTE, OTHER_COLOR,
+} from '../src/core/vector/style.js';
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -180,107 +180,6 @@ t('chooseRenderScale menghormati anggaran piksel', () => {
   const px = 595 * 842 * s * s;
   assert.ok(px <= 24e6 * 1.01, `${px} piksel melebihi anggaran`);
   assert.ok(s > 1, 'skala harus menaikkan resolusi');
-});
-
-console.log('\n== parser ekspresi raster ==');
-const BANDS = ['red', 'green', 'blue', 'nir', 'swir1'];
-t('NDVI diurai dan dievaluasi dengan benar', () => {
-  const { ast, usedBands } = parseExpression('(nir - red) / (nir + red)', { bands: BANDS });
-  assert.deepEqual(usedBands.sort(), ['nir', 'red']);
-  near(evaluate(ast, { nir: 0.5, red: 0.1 }), 0.6666666667, 1e-9);
-});
-t('presedensi operator dihormati', () => {
-  const { ast } = parseExpression('2 + 3 * 4 ^ 2', {});
-  assert.equal(evaluate(ast, {}), 50);
-});
-t('pangkat asosiatif kanan', () => {
-  const { ast } = parseExpression('2 ^ 3 ^ 2', {});
-  assert.equal(evaluate(ast, {}), 512);
-});
-t('unary minus dan tanda kurung bersarang', () => {
-  const { ast } = parseExpression('-(3 - 5) * (2 + -1)', {});
-  assert.equal(evaluate(ast, {}), 2);
-});
-t('where() bekerja sebagai percabangan', () => {
-  const { ast } = parseExpression('where(nir > 0.3, 1, 0)', { bands: BANDS });
-  assert.equal(evaluate(ast, { nir: 0.5 }), 1);
-  assert.equal(evaluate(ast, { nir: 0.1 }), 0);
-});
-t('pembagian nol menghasilkan NaN, bukan Infinity', () => {
-  const { ast } = parseExpression('red / green', { bands: BANDS });
-  assert.ok(Number.isNaN(evaluate(ast, { red: 1, green: 0 })));
-});
-t('pita tidak dikenal ditolak dengan pesan yang menyebut daftar sah', () => {
-  assert.throws(() => parseExpression('b99 * 2', { bands: BANDS }), /b99|tidak ada/i);
-});
-t('injeksi kode ditolak oleh lexer', () => {
-  for (const bad of [
-    'constructor.constructor("return 1")()',
-    'red; fetch("http://x")',
-    'red[0]',
-    '`${red}`',
-  ]) {
-    assert.throws(() => parseExpression(bad, { bands: BANDS }), undefined, `seharusnya ditolak: ${bad}`);
-  }
-});
-t('kurung tidak seimbang ditolak', () => {
-  assert.throws(() => parseExpression('(nir - red', { bands: BANDS }), /Diharapkan/);
-  assert.throws(() => parseExpression('nir - red)', { bands: BANDS }), /tidak terpakai/);
-});
-t('semua templat indeks bawaan dapat diurai', () => {
-  const all = ['red', 'green', 'blue', 'nir', 'swir1', 'swir2'];
-  for (const p of INDEX_PRESETS) {
-    const { ast } = parseExpression(p.expr, { bands: all });
-    const env = Object.fromEntries(all.map((b) => [b, 0.3]));
-    const v = evaluate(ast, env);
-    assert.ok(Number.isFinite(v) || Number.isNaN(v), `${p.id} menghasilkan ${v}`);
-  }
-});
-
-console.log('\n== penerjemah GLSL ==');
-t('emitGLSL memakai safeDiv untuk pembagian', () => {
-  const { ast } = parseExpression('(nir - red) / (nir + red)', { bands: BANDS });
-  const src = emitGLSL(ast, ['red', 'nir']);
-  assert.match(src, /safeDiv/);
-  assert.match(src, /v_band1/);   // nir adalah indeks 1
-});
-t('literal bilangan bulat mendapat titik desimal (GLSL menolak "2")', () => {
-  const { ast } = parseExpression('nir * 2', { bands: BANDS });
-  const src = emitGLSL(ast, ['nir']);
-  assert.match(src, /2\.0/);
-  assert.doesNotMatch(src, /\* 2\)/);
-});
-t('where() menjadi operator terner GLSL', () => {
-  const { ast } = parseExpression('where(nir > 0.3, 1, 0)', { bands: BANDS });
-  const src = emitGLSL(ast, ['nir']);
-  assert.match(src, /\?/);
-  assert.match(src, /:/);
-});
-t('pita yang tidak terikat ke sampler ditolak saat kompilasi', () => {
-  const { ast } = parseExpression('nir - red', { bands: BANDS });
-  assert.throws(() => emitGLSL(ast, ['nir']), /red/);
-});
-
-console.log('\n== statistik dan anggaran memori ==');
-t('sampleStats memotong pencilan pada persentil 2-98', () => {
-  const v = new Float32Array(10000);
-  for (let i = 0; i < 10000; i++) v[i] = i / 10000;
-  v[0] = -9999;      // piksel rusak
-  v[9999] = 9999;
-  const s = sampleStats(v, { nodata: null });
-  assert.ok(s.min > -1 && s.max < 2, `min=${s.min} max=${s.max} tidak terpotong`);
-});
-t('sampleStats mengabaikan NoData', () => {
-  const v = new Float32Array([1, 2, 3, -9999, -9999, 4, 5]);
-  const s = sampleStats(v, { nodata: -9999, maxSamples: 1000 });
-  assert.equal(s.count, 5);
-});
-t('planWorkingSize menjaga anggaran memori', () => {
-  const p = planWorkingSize(10980, 10980, { bandCount: 4, maxWorkingPixels: 4e6 });
-  assert.ok(p.width * p.height <= 4.1e6, `${p.width}x${p.height} terlalu besar`);
-  assert.ok(p.decimation > 5);
-  const kecil = planWorkingSize(800, 600, { bandCount: 4 });
-  assert.equal(kecil.decimation, 1, 'citra kecil tidak boleh didesimasi');
 });
 
 console.log('\n== kueri atribut vektor ==');
@@ -660,6 +559,61 @@ t('geometri bertingkat (MultiPolygon) ikut tereproyeksi seluruhnya', () => {
   const { fc: out } = reprojectToWGS84(fc, 32748);
   const pt = out.features[0].geometry.coordinates[0][0][0];
   assert.ok(Math.abs(pt[0]) <= 180 && Math.abs(pt[1]) <= 90, `masih terproyeksi: ${pt}`);
+});
+
+console.log('\n== pewarnaan kelas vektor ==');
+const FC_KELAS = { type: 'FeatureCollection', features: [
+  { properties: { tutupan: 'Sawah' } }, { properties: { tutupan: 'Sawah' } },
+  { properties: { tutupan: 'Terbangun' } }, { properties: { tutupan: 'Kebun' } },
+  { properties: { tutupan: null } },
+].map((f) => ({ type: 'Feature', geometry: null, ...f })) };
+
+t('nilai unik dihitung dan diurutkan menurut jumlah', () => {
+  const v = uniqueValues(FC_KELAS, 'tutupan');
+  assert.equal(v.length, 4);
+  assert.equal(v[0].value, 'Sawah');
+  assert.equal(v[0].count, 2);
+});
+t('nilai kosong dikumpulkan menjadi satu kategori, bukan diabaikan', () => {
+  const v = uniqueValues(FC_KELAS, 'tutupan');
+  const kosong = v.find((x) => x.value === '');
+  assert.ok(kosong, 'kategori kosong hilang');
+  assert.equal(kosong.count, 1);
+});
+t('pemetaan warna stabil antarpemuatan berkas yang sama', () => {
+  const a = buildColorMap(uniqueValues(FC_KELAS, 'tutupan'));
+  const acak = { type: 'FeatureCollection',
+    features: [...FC_KELAS.features].reverse() };
+  const b = buildColorMap(uniqueValues(acak, 'tutupan'));
+  assert.deepEqual(a, b, 'warna berubah ketika urutan fitur berbeda');
+});
+t('warna yang ditimpa pengguna dipertahankan', () => {
+  const m = buildColorMap(uniqueValues(FC_KELAS, 'tutupan'), { Sawah: '#123456' });
+  assert.equal(m.Sawah, '#123456');
+  assert.ok(PALETTE.includes(m.Kebun), 'kategori lain tetap dari palet');
+});
+t('styleFor memakai warna kategori yang benar', () => {
+  const colors = buildColorMap(uniqueValues(FC_KELAS, 'tutupan'));
+  const st = styleFor({ tutupan: 'Sawah' }, { field: 'tutupan', colors });
+  assert.equal(st.fillColor, colors.Sawah);
+  assert.equal(st.color, colors.Sawah);
+});
+t('nilai di luar daftar memakai warna cadangan, bukan undefined', () => {
+  const st = styleFor({ tutupan: 'BelumAda' }, { field: 'tutupan', colors: {} });
+  assert.equal(st.fillColor, OTHER_COLOR);
+});
+t('mode redup mengabaikan kategori', () => {
+  const st = styleFor({ tutupan: 'Sawah' },
+    { field: 'tutupan', colors: { Sawah: '#fff' }, dimmed: true });
+  assert.equal(st.fillColor, OTHER_COLOR);
+  assert.ok(st.fillOpacity < 0.1);
+});
+t('legenda memuat label, warna, dan jumlah', () => {
+  const colors = buildColorMap(uniqueValues(FC_KELAS, 'tutupan'));
+  const L = legendEntries(FC_KELAS, 'tutupan', colors);
+  assert.equal(L.length, 4);
+  assert.ok(L.every((e) => e.color && e.label && Number.isFinite(e.count)));
+  assert.ok(L.some((e) => e.label === '(kosong)'));
 });
 
 console.log(`\n${pass} lulus, ${fail} gagal\n`);

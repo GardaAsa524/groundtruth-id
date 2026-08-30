@@ -168,6 +168,33 @@ export function SamplingBar({ mode, onModeChange, onCapture, geo, disabledReason
   );
 }
 
+/* --------------------------------------------------------------------- foto */
+
+/**
+ * Kecilkan dan mampatkan foto sebelum disimpan.
+ *
+ * Foto kamera ponsel modern berukuran 3-8 MB. Menyimpannya apa adanya membuat
+ * seratus titik menghabiskan ratusan megabita di memori peramban, dan KMZ-nya
+ * menolak dibuka. Pada 1600 piksel sisi terpanjang dengan mutu 0,72, kulit
+ * kayu dan tekstur atap masih terbaca jelas untuk pemeriksaan ulang, sementara
+ * berkasnya turun ke sekitar 200-400 kB.
+ */
+export async function compressPhoto(file, { maxSide = 1600, quality = 0.72 } = {}) {
+  const bitmap = await createImageBitmap(file);
+  const scale = Math.min(1, maxSide / Math.max(bitmap.width, bitmap.height));
+  const w = Math.round(bitmap.width * scale);
+  const h = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement('canvas');
+  canvas.width = w;
+  canvas.height = h;
+  const ctx = canvas.getContext('2d');
+  ctx.drawImage(bitmap, 0, 0, w, h);
+  bitmap.close?.();
+
+  return canvas.toDataURL('image/jpeg', quality);
+}
+
 /* ----------------------------------------------------------------- formulir */
 
 /**
@@ -179,10 +206,13 @@ export function SamplingBar({ mode, onModeChange, onCapture, geo, disabledReason
  */
 export function SampleSheet({ draft, knownClasses, onSave, onCancel }) {
   const { t, nf } = useLocale();
+  const [name, setName] = useState('');
   const [predicted, setPredicted] = useState('');
   const [verdict, setVerdict] = useState(null);      // true = sesuai
   const [actual, setActual] = useState('');
   const [note, setNote] = useState('');
+  const [photos, setPhotos] = useState([]);
+  const [photoBusy, setPhotoBusy] = useState(false);
   const firstField = useRef(null);
 
   // Setel ulang tiap kali titik baru dibuka, dan pertahankan kelas terakhir —
@@ -193,6 +223,10 @@ export function SampleSheet({ draft, knownClasses, onSave, onCancel }) {
     setActual('');
     setNote('');
     setPredicted(draft.lastPredicted ?? '');
+    setPhotos([]);
+    // Nama otomatis bernomor urut; pengguna bebas menimpanya. Menomori sendiri
+    // di lapangan adalah pekerjaan yang mudah salah dan tidak perlu.
+    setName(`CP-${String(draft.nextIndex ?? 1).padStart(3, '0')}`);
     setTimeout(() => firstField.current?.focus(), 50);
   }, [draft]);
 
@@ -205,6 +239,8 @@ export function SampleSheet({ draft, knownClasses, onSave, onCancel }) {
   const submit = () => {
     if (!canSave) return;
     onSave({
+      name: name.trim(),
+      photos,
       lat: draft.lat,
       lon: draft.lon,
       source: draft.source,
@@ -241,6 +277,12 @@ export function SampleSheet({ draft, knownClasses, onSave, onCancel }) {
         </p>
 
         <label className="gt-field">
+          {t('sampling.pointName')}
+          <input value={name} onChange={(e) => setName(e.target.value)}
+            placeholder="CP-001" />
+        </label>
+
+        <label className="gt-field">
           {t('sampling.mapClass')}
           <input ref={firstField} list="gt-known-classes" value={predicted}
             placeholder={t('sampling.mapClassHint')}
@@ -274,6 +316,45 @@ export function SampleSheet({ draft, knownClasses, onSave, onCancel }) {
               onChange={(e) => setActual(e.target.value)} />
           </label>
         )}
+
+        <div className="gt-field">
+          {t('sampling.photos')} ({photos.length}/3)
+          <div className="gt-photo-strip">
+            {photos.map((p, i) => (
+              <div key={i} className="gt-photo-thumb">
+                <img src={p} alt="" />
+                <button type="button" aria-label={t('sampling.removePhoto')}
+                  onClick={() => setPhotos((x) => x.filter((_, k) => k !== i))}>×</button>
+              </div>
+            ))}
+            {photos.length < 3 && (
+              <label className="gt-photo-add">
+                {photoBusy ? '…' : '+'}
+                {/* capture="environment" membuka kamera belakang langsung di
+                    ponsel, dan tetap berfungsi sebagai pemilih berkas di
+                    komputer — jadi tidak perlu dua jalur terpisah. */}
+                <input type="file" accept="image/*" capture="environment"
+                  onChange={async (e) => {
+                    const f = e.target.files?.[0];
+                    e.target.value = '';
+                    if (!f) return;
+                    setPhotoBusy(true);
+                    try {
+                      // Pemampatan diselesaikan lebih dahulu; await tidak dapat
+                      // berada di dalam callback pembaruan status.
+                      const dataURL = await compressPhoto(f);
+                      setPhotos((x) => [...x, dataURL]);
+                    } catch (err) {
+                      console.warn('Gagal memproses foto:', err);
+                    } finally {
+                      setPhotoBusy(false);
+                    }
+                  }} />
+              </label>
+            )}
+          </div>
+          <p className="gt-hint">{t('sampling.photoHint')}</p>
+        </div>
 
         <label className="gt-field">
           {t('sampling.note')}
@@ -311,11 +392,15 @@ export function SampleMarkers({ samples, onDelete }) {
         <Marker key={s.id} position={[s.lat, s.lon]}
           icon={sampleIcon(s.isCorrect, s.source ?? 'gps')}>
           <Popup>
-            <strong>{s.predicted}</strong><br />
+            {s.name && <><strong>{s.name}</strong><br /></>}
+            <span>{s.predicted}</span><br />
             {s.isCorrect ? t('validation.truth') : `${t('validation.false')} → ${s.actual}`}<br />
             <span className="mono">
               {s.source === 'gps' ? `GPS ±${nf(s.accuracy, 1)} m` : t('sampling.modeCrosshair')}
             </span>
+            {s.photos?.length > 0 && (
+              <><br /><img src={s.photos[0]} alt="" className="gt-popup-photo" /></>
+            )}
             {s.note && <><br /><em>{s.note}</em></>}
             <br />
             <button type="button" onClick={() => onDelete(s.id)}>{t('sampling.delete')}</button>

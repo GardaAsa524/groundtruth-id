@@ -16,13 +16,16 @@
  *     ├ GeoPDF ─→ pdf-lib (georeferensi) ─┐
  *     │           pdf.js (piksel)         ├→ buildGeoref ─→ GeoPDFGridLayer
  *     │                                    └→ panel mutu (RMSE, konvergensi)
- *     ├ GeoTIFF ─→ geotiff.js ─→ Float32Array/pita ─→ RasterGLRenderer ─→ overlay
- *     │                            ↑
- *     │              parseExpression → AST → emitGLSL (shader)
- *     └ GeoJSON/SHP ─→ inferSchema ─→ AttributeQueryBuilder ─→ bitmask
- *                                                              └→ FilteredVectorLayer
+ *     └ GeoJSON ─→ detectVectorCRS ─→ reprojectToWGS84 ─→ inferSchema
+ *                        │                                      │
+ *                        │                                      ├→ SymbologyPanel (warna kelas)
+ *                        │                                      └→ AttributeQueryBuilder → bitmask
+ *                        └→ CRSPrompt bila EPSG tidak diketahui      └→ FilteredVectorLayer
  *   Digitasi
- *     └ Geoman ─→ FeatureCollection ─→ downloadGeoJSON / webhook Sheets
+ *     └ Geoman ─→ FeatureCollection ─→ ExportPanel
+ *
+ *   Ekspor
+ *     └ sampel + foto ─→ KMZ (ZIP + doc.kml) · GeoJSON · XLSX (ZIP + OOXML)
  *
  *   Validasi
  *     └ sakelar Truth/False + kelas ─→ sampel ─→ confusionMatrix ─→ OA/F1/Kappa
@@ -40,10 +43,12 @@ import { useGeolocation } from './hooks/useGeolocation.js';
 import { ActiveBasemap, BasemapGallery, InvalidateOnResize } from './components/BasemapGallery.jsx';
 import { GPSAccuracyLayer, GPSReadout } from './components/GPSAccuracyLayer.jsx';
 import { useGeoPDF, GeoPDFLayer, GeoPDFQualityPanel } from './components/GeoPDFLayer.jsx';
-import { useGeoTIFF, RasterCalculator, RasterResultLayer } from './components/RasterCalculator.jsx';
 import {
   useVectorFile, AttributeQueryBuilder, FilteredVectorLayer, CRSPrompt,
+  SymbologyPanel,
 } from './components/AttributeQueryBuilder.jsx';
+import { ExportPanel } from './components/ExportPanel.jsx';
+import { Compass } from './components/Compass.jsx';
 import { LayerPanel } from './components/LayerPanel.jsx';
 import { boundsOf } from './core/vector/reproject.js';
 import { DrawingTools, DrawingPanel, ExportButton } from './components/DrawingTools.jsx';
@@ -55,7 +60,7 @@ import {
   buildMatrix, computeMetrics, computeBinaryValidation, matrixToCSV,
 } from './core/accuracy/confusionMatrix.js';
 
-const TABS = ['map', 'layers', 'raster', 'query', 'accuracy', 'settings'];
+const TABS = ['map', 'layers', 'query', 'accuracy', 'export', 'settings'];
 
 function Workspace() {
   const { t, nf, toggle: toggleLocale } = useLocale();
@@ -67,8 +72,6 @@ function Workspace() {
   const [allowGoogle, setAllowGoogle] = useState(false);
   const [follow, setFollow] = useState(true);
   const [pdfOpacity, setPdfOpacity] = useState(1);
-  const [rasterResult, setRasterResult] = useState(null);
-  const [rasterGeom, setRasterGeom] = useState(null);
   const [queryResult, setQueryResult] = useState(null);
   const [filterMode, setFilterMode] = useState('dim');
 
@@ -79,12 +82,15 @@ function Workspace() {
   const [sampleMode, setSampleMode] = useState('crosshair');
   // Visibilitas dan transparansi per lapisan, dikelola satu tempat.
   const [layerState, setLayerState] = useState({});
+  const [symbology, setSymbology] = useState({ field: '', colors: {} });
+  // Panel samping dapat disembunyikan supaya peta memakai seluruh layar —
+  // pada ponsel, dashboard yang selalu terbuka menyisakan peta terlalu sempit.
+  const [panelOpen, setPanelOpen] = useState(true);
   const [center, setCenter] = useState(null);
   const [draft, setDraft] = useState(null);      // titik menunggu diisi kelasnya
 
   const geo = useGeolocation({ toleranceMeters: 15 });
   const pdf = useGeoPDF();
-  const tiff = useGeoTIFF();
   const vector = useVectorFile();
 
   // Koordinat UTM dari fix GPS — ditampilkan berdampingan dengan lat/lon karena
@@ -173,15 +179,6 @@ function Workspace() {
         ...st('geopdf'),
       });
     }
-    if (rasterResult) {
-      out.push({
-        id: 'raster', kind: 'raster',
-        name: rasterResult.mode === 'rgb' ? 'Raster — RGB' : `Raster — ${rasterResult.expression}`,
-        bounds: rasterGeom?.ok ? rasterGeom.bounds ?? null : null,
-        note: rasterGeom?.reprojected ? `EPSG:${tiff.data?.epsg}` : undefined,
-        ...st('raster', { opacity: 0.85 }),
-      });
-    }
     if (vector.fc) {
       out.push({
         id: 'vector', kind: 'vector',
@@ -219,8 +216,8 @@ function Workspace() {
       });
     }
     return out;
-  }, [pdf.doc, rasterResult, rasterGeom, vector.fc, vector.bounds, vector.crs,
-      vector.name, samples, drawnFeatures, layerState, tiff.data, t]);
+  }, [pdf.doc, vector.fc, vector.bounds, vector.crs,
+      vector.name, samples, drawnFeatures, layerState, t]);
 
   const vis = useCallback((id) => layerState[id]?.visible !== false, [layerState]);
   const opac = useCallback(
@@ -238,7 +235,6 @@ function Workspace() {
 
   const removeLayer = useCallback((id) => {
     if (id === 'vector') vector.clear();
-    if (id === 'raster') setRasterResult(null);
     if (id === 'geopdf') window.location.reload();   // GeoPDF terikat ke berkas terunggah
     setLayerState((prev) => { const n = { ...prev }; delete n[id]; return n; });
   }, [vector]);
@@ -282,7 +278,13 @@ function Workspace() {
       </header>
 
       <div className="gt-body">
-        <aside className="gt-sidebar">
+        <aside className={`gt-sidebar${panelOpen ? '' : ' is-collapsed'}`}>
+          <button type="button" className="gt-panel-toggle"
+            aria-expanded={panelOpen}
+            onClick={() => setPanelOpen((v) => !v)}>
+            <span className="gt-panel-grip" />
+            {panelOpen ? t('ui.hidePanel') : t('ui.showPanel')}
+          </button>
           <nav className="gt-tabs">
             {TABS.map((k) => (
               <button key={k} type="button"
@@ -325,6 +327,9 @@ function Workspace() {
                 )}
 
                 <hr />
+                <Compass />
+
+                <hr />
                 <DrawingPanel featureCollection={drawnFeatures} controlsRef={drawControls} />
                 <ExportButton featureCollection={drawnFeatures} />
 
@@ -340,44 +345,6 @@ function Workspace() {
                 onZoom={zoomTo}
                 onRemove={removeLayer}
               />
-            )}
-
-            {tab === 'raster' && (
-              <>
-                <label className="gt-field">
-                  GeoTIFF
-                  <input type="file" accept=".tif,.tiff"
-                    onChange={(e) => e.target.files[0] && tiff.load(e.target.files[0])} />
-                </label>
-                {tiff.status === 'error' && <p className="gt-gps-alert">{tiff.error}</p>}
-                <RasterCalculator tiff={tiff.data} onLayerReady={setRasterResult} />
-                {rasterGeom && !rasterGeom.ok && (
-                  <p className="gt-gps-alert" role="alert">{rasterGeom.error}</p>
-                )}
-                {rasterGeom?.ok && (
-                  <dl className="gt-quality">
-                    <div>
-                      <dt>{t('raster.placement')}</dt>
-                      <dd className="mono">
-                        {rasterGeom.reprojected
-                          ? `UTM ${rasterGeom.crs.zone}${rasterGeom.crs.south ? 'S' : 'N'} → WGS 84`
-                          : 'EPSG:4326'}
-                      </dd>
-                    </div>
-                    {rasterGeom.reprojected && (
-                      <div>
-                        <dt>{t('raster.overlaySkew')}</dt>
-                        <dd className={rasterGeom.warn ? 'is-warning mono' : 'mono'}>
-                          ±{nf(rasterGeom.skewMeters, 1)} m
-                        </dd>
-                      </div>
-                    )}
-                  </dl>
-                )}
-                {rasterGeom?.warn && (
-                  <p className="gt-hint">{t('raster.skewWarn', { m: nf(rasterGeom.skewMeters, 0) })}</p>
-                )}
-              </>
             )}
 
             {tab === 'query' && (
@@ -414,6 +381,10 @@ function Workspace() {
                   </>
                 )}
 
+                {vector.fc && (
+                  <SymbologyPanel fc={vector.fc} schema={vector.schema}
+                    value={symbology} onChange={setSymbology} />
+                )}
                 <AttributeQueryBuilder fc={vector.fc} schema={vector.schema} onResult={setQueryResult} />
               </>
             )}
@@ -422,6 +393,16 @@ function Workspace() {
               <AccuracyPanel
                 metrics={metrics} binary={binary} samples={samples}
                 onExport={exportCSV} t={t} nf={nf}
+              />
+            )}
+
+            {tab === 'export' && (
+              <ExportPanel
+                samples={samples}
+                drawnFeatures={drawnFeatures}
+                cm={metrics?.cm}
+                metrics={metrics}
+                binary={binary}
               />
             )}
 
@@ -456,15 +437,12 @@ function Workspace() {
             {pdf.doc && vis('geopdf') && (
               <GeoPDFLayer doc={pdf.doc} opacity={opac('geopdf', pdfOpacity)} />
             )}
-            {rasterResult && vis('raster') && (
-              <RasterResultLayer result={rasterResult} opacity={opac('raster', 0.85)}
-                onGeometryInfo={setRasterGeom} />
-            )}
             {vector.fc && vis('vector') && (
               <FilteredVectorLayer
                 fc={vector.fc}
                 mask={queryResult?.mask}
                 mode={filterMode}
+                symbology={symbology}
               />
             )}
 
