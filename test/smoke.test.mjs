@@ -51,7 +51,7 @@ const declared = new Set([
   ...Object.keys(pkg.devDependencies ?? {}),
 ]);
 
-/** Telusuri seluruh berkas sumber secara rekursif. */
+/** Telusuri seluruh berkas sumber secara rekursif. Dipakai beberapa bagian. */
 function walkSrc(dir, out = []) {
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     const u = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
@@ -95,6 +95,52 @@ t(`setiap impor paket terdaftar di package.json (${srcFiles.length} berkas dipin
     `   (dipindai ${srcFiles.length} berkas; bandingkan dengan isi arsip)`
   );
 });
+
+
+/* ------------------------------------------ 0b. aset statis yang ditautkan */
+
+console.log('\n== aset yang ditautkan antarmuka ==');
+
+/**
+ * MENGAPA UJI INI ADA
+ * -------------------
+ * Tautan ke berkas statis adalah cara paling mudah menghasilkan tautan mati:
+ * ia tidak diperiksa oleh bundler, tidak menghasilkan galat saat build, dan
+ * baru ketahuan ketika pengguna mengetuknya dan mendapat halaman 404.
+ *
+ * Pemeriksaan ini memastikan setiap berkas yang ditautkan dari komponen
+ * benar-benar ada di public/, sekaligus memastikan jalurnya RELATIF —
+ * GitHub Pages menyajikan situs proyek dari sub-folder, sehingga jalur absolut
+ * seperti "/Modul_REIS.pdf" akan menunjuk ke akar domain dan gagal.
+ */
+{
+  const publicDir = new URL('../public/', import.meta.url);
+  const ada = new Set(readdirSync(publicDir));
+  const HREF_RE = /(?:href|src)=["']([^"'{}]+\.(?:pdf|svg|png|webmanifest))["']/g;
+
+  const rusak = [];
+  const absolut = [];
+  for (const f of walkSrc(new URL('../src/', import.meta.url))) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(HREF_RE)) {
+      const href = m[1];
+      if (/^(https?:|data:)/.test(href)) continue;
+      const rel = f.pathname.split('/src/')[1];
+      if (href.startsWith('/')) absolut.push(`${href} di ${rel}`);
+      const nama = href.replace(/^\.?\//, '').split('?')[0];
+      if (!ada.has(nama)) rusak.push(`${href} di ${rel}`);
+    }
+  }
+
+  t('setiap aset yang ditautkan ada di public/', () => {
+    assert.equal(rusak.length, 0,
+      `tautan mati:\n       ${rusak.join('\n       ')}`);
+  });
+  t('tautan aset memakai jalur relatif, bukan absolut', () => {
+    assert.equal(absolut.length, 0,
+      `jalur absolut akan 404 di GitHub Pages:\n       ${absolut.join('\n       ')}`);
+  });
+}
 
 /* ------------------------------------------------- 1. analisis statis JSX */
 

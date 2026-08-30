@@ -52,6 +52,9 @@ import { AboutPanel } from './components/AboutPanel.jsx';
 import { useSheetSync } from './hooks/useSheetSync.js';
 import { SYNC } from './core/sync/sheets.js';
 import { Compass } from './components/Compass.jsx';
+import {
+  RulerLayer, RulerPanel, TrackLayer, TrackPanel, useTrackRecorder,
+} from './components/Measure.jsx';
 import { LayerPanel } from './components/LayerPanel.jsx';
 import { boundsOf } from './core/vector/reproject.js';
 import { DrawingTools, DrawingPanel, ExportButton } from './components/DrawingTools.jsx';
@@ -90,10 +93,19 @@ function Workspace() {
   // pada ponsel, dashboard yang selalu terbuka menyisakan peta terlalu sempit.
   const [panelOpen, setPanelOpen] = useState(true);
   const [testing, setTesting] = useState(false);
+
+  const [rulerActive, setRulerActive] = useState(false);
+  const [rulerMode, setRulerMode] = useState('distance');
+  const [rulerPoints, setRulerPoints] = useState([]);
   const [center, setCenter] = useState(null);
   const [draft, setDraft] = useState(null);      // titik menunggu diisi kelasnya
 
   const geo = useGeolocation({ toleranceMeters: 15 });
+
+  // Perekam jejak menumpang aliran fix dari hook di atas, bukan membuka
+  // pengamat kedua: dua watchPosition berjalan bersamaan menguras baterai dua
+  // kali lipat tanpa memberi fix yang lebih baik.
+  const track = useTrackRecorder(geo);
 
   // Tandai foto sudah terkirim supaya tidak diunggah ulang pada percobaan
   // berikutnya — inilah yang menjaga kuota data surveyor.
@@ -218,6 +230,21 @@ function Workspace() {
         ...st('samples'),
       });
     }
+    if (track.points.length) {
+      out.push({
+        id: 'track', kind: 'track',
+        name: t('track.title'),
+        count: track.points.length,
+        bounds: boundsOf({
+          features: [{ geometry: {
+            type: 'LineString',
+            coordinates: track.points.map((p) => [p.lon, p.lat]),
+          } }],
+        }),
+        removable: false,
+        ...st('track'),
+      });
+    }
     if (drawnFeatures?.features?.length) {
       out.push({
         id: 'drawing', kind: 'drawing',
@@ -229,8 +256,8 @@ function Workspace() {
       });
     }
     return out;
-  }, [pdf.doc, vector.fc, vector.bounds, vector.crs,
-      vector.name, samples, drawnFeatures, layerState, t]);
+  }, [pdf.doc, vector.fc, vector.bounds, vector.crs, vector.name,
+      samples, drawnFeatures, track.points, layerState, t]);
 
   const vis = useCallback((id) => layerState[id]?.visible !== false, [layerState]);
   const opac = useCallback(
@@ -340,6 +367,22 @@ function Workspace() {
                 )}
 
                 <hr />
+                <h3 className="gt-section-h">{t('ruler.title')}</h3>
+                <RulerPanel
+                  active={rulerActive}
+                  onToggle={setRulerActive}
+                  points={rulerPoints}
+                  mode={rulerMode}
+                  onModeChange={setRulerMode}
+                  onUndo={() => setRulerPoints((p) => p.slice(0, -1))}
+                  onClear={() => setRulerPoints([])}
+                />
+
+                <hr />
+                <h3 className="gt-section-h">{t('track.title')}</h3>
+                <TrackPanel track={track} geo={geo} />
+
+                <hr />
                 <Compass />
 
                 <hr />
@@ -416,6 +459,9 @@ function Workspace() {
                 cm={metrics?.cm}
                 metrics={metrics}
                 binary={binary}
+                track={track.points.length ? { name: t('track.title'), points: track.points } : null}
+                syncToken={sync.config.token}
+                onSyncTokenChange={(token) => sync.update({ token })}
               />
             )}
 
@@ -524,10 +570,18 @@ function Workspace() {
 
             {/* Wajib di dalam MapContainer: memanggil useMap(). */}
             <DrawingTools onChange={setDrawnFeatures} controlsRef={drawControls} />
+
+            <TrackLayer points={track.points} recording={track.recording} />
+            <RulerLayer
+              active={rulerActive}
+              points={rulerPoints}
+              mode={rulerMode}
+              onAddPoint={(p) => setRulerPoints((prev) => [...prev, p])}
+            />
           </MapContainer>
 
           <CrosshairOverlay
-            active={sampleMode === 'crosshair' && !draft}
+            active={sampleMode === 'crosshair' && !draft && !rulerActive}
             center={center}
             utm={centerUTM}
           />

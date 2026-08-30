@@ -41,6 +41,24 @@ export function AboutPanel() {
       </section>
 
       <section>
+        <h3>{t('about.manualTitle')}</h3>
+        <p>{t('about.manualIntro')}</p>
+        {/*
+          Jalur relatif, bukan absolut. GitHub Pages menyajikan situs proyek
+          dari sub-folder; jalur absolut "/Modul_REIS.pdf" akan menunjuk ke akar
+          domain dan menghasilkan 404.
+        */}
+        <a className="gt-manual-link" href="Modul_REIS.pdf"
+           target="_blank" rel="noopener noreferrer">
+          <span className="gt-manual-icon">PDF</span>
+          <span>
+            <strong>{t('about.manualLink')}</strong>
+            <br /><small>{t('about.manualMeta')}</small>
+          </span>
+        </a>
+      </section>
+
+      <section>
         <h3>{t('about.techTitle')}</h3>
         <ul className="gt-about-list">
           <li>{t('about.tech1')}</li>

@@ -47,7 +47,10 @@ export default defineConfig(({ command }) => ({
         // tanpa jaringan. Batas besar ini disengaja: pdf.worker sendiri 1,4 MB,
         // dan justru berkas itulah yang wajib tersedia luring karena GeoPDF
         // dibuka di lapangan, bukan di kantor.
-        globPatterns: ['**/*.{js,mjs,css,html,png,svg,woff2}'],
+        // pdf disertakan dengan sengaja: modul penggunaan justru paling
+        // dibutuhkan di lapangan, tepat ketika tidak ada jaringan untuk
+        // mengunduhnya.
+        globPatterns: ['**/*.{js,mjs,css,html,png,svg,woff2,pdf}'],
         maximumFileSizeToCacheInBytes: 6 * 1024 * 1024,
 
         // Ubin peta TIDAK di-precache — jumlahnya tak terhingga. Ia disimpan

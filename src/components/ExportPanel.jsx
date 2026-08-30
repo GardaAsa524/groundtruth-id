@@ -18,6 +18,9 @@ import { exportKML, exportSamplesGeoJSON } from '../core/export/kml.js';
 import { buildAccuracyWorkbook } from '../core/export/xlsx.js';
 import { downloadBlob } from '../core/export/zip.js';
 import { downloadGeoJSON } from './DrawingTools.jsx';
+import { SheetsSetup } from './SheetsSetup.jsx';
+import { trackToGeoJSON, trackToKML, trackStats } from '../core/track/track.js';
+import { formatDistance } from '../core/geo/measure.js';
 
 const stamp = () => {
   const d = new Date();
@@ -25,8 +28,9 @@ const stamp = () => {
   return `${d.getFullYear()}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}`;
 };
 
-export function ExportPanel({ samples, drawnFeatures, cm, metrics, binary }) {
-  const { t, nf } = useLocale();
+export function ExportPanel({ samples, drawnFeatures, cm, metrics, binary, track,
+                              syncToken, onSyncTokenChange }) {
+  const { t, nf, locale } = useLocale();
   const [busy, setBusy] = useState(null);
   const [last, setLast] = useState(null);
 
@@ -112,6 +116,32 @@ export function ExportPanel({ samples, drawnFeatures, cm, metrics, binary }) {
         <p className="gt-hint">{t('export.xlsxNote')}</p>
       </section>
 
+      {track && (
+        <section className="gt-export-group">
+          <h4>{t('track.title')}</h4>
+          <p className="gt-export-count">
+            <strong>{nf(track.points.length, 0)}</strong> {t('export.pointsUnit')} ·{' '}
+            {formatDistance(trackStats(track.points).length, locale)}
+          </p>
+          <button type="button" disabled={busy} onClick={() => run('trkKml', async () => {
+            const blob = new Blob([trackToKML(track)],
+              { type: 'application/vnd.google-earth.kml+xml' });
+            await downloadBlob(blob, `REIS_jejak_${stamp()}.kml`);
+            return t('export.doneTrack');
+          })}>
+            {busy === 'trkKml' ? t('export.working') : 'KML'}
+          </button>
+          <button type="button" disabled={busy} onClick={() => run('trkGj', async () => {
+            const blob = new Blob([JSON.stringify(trackToGeoJSON(track), null, 1)],
+              { type: 'application/geo+json' });
+            await downloadBlob(blob, `REIS_jejak_${stamp()}.geojson`);
+            return t('export.doneTrack');
+          })}>
+            {busy === 'trkGj' ? t('export.working') : 'GeoJSON'}
+          </button>
+        </section>
+      )}
+
       {drawnCount > 0 && (
         <section className="gt-export-group">
           <h4>{t('export.drawing')}</h4>
@@ -131,6 +161,13 @@ export function ExportPanel({ samples, drawnFeatures, cm, metrics, binary }) {
       )}
 
       <p className="gt-hint gt-export-warn">{t('export.storageWarn')}</p>
+
+      {/*
+        Pemasang sinkronisasi diletakkan di sini, bukan hanya di Pengaturan,
+        karena secara konsep ia adalah cara keempat mengeluarkan data — dan
+        di sinilah orang mencarinya ketika bertanya "bagaimana datanya keluar".
+      */}
+      <SheetsSetup token={syncToken} onTokenChange={onSyncTokenChange} />
     </div>
   );
 }

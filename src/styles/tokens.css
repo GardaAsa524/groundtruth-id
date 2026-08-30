@@ -339,3 +339,47 @@ body { margin: 0; background: var(--bg); color: var(--text);
 .gt-sync-status.is-sending { background: color-mix(in srgb, #2bd9f0 18%, transparent); color: #2bd9f0; }
 .gt-sync-status.is-queued { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
 .gt-sync-status.is-error { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }
+
+/* ==================== pemasang Apps Script & tautan modul ================= */
+.gt-setup-steps { margin: 8px 0 12px; padding-left: 18px; font-size: 12.5px;
+  line-height: 1.55; color: var(--text); }
+.gt-setup-steps li { margin-bottom: 7px; }
+.gt-setup-deploy { margin: 6px 0; padding: 8px 10px; border-radius: 8px;
+  background: var(--panel); border: 1px solid var(--line);
+  font-size: 12px; line-height: 1.7; }
+.gt-setup-deploy code { font-family: ui-monospace, monospace; color: var(--muted); }
+.gt-token-row input { flex: 1; min-width: 0; }
+.gt-token-row button { width: auto !important; margin-top: 0 !important;
+  flex: none; padding: 11px 14px !important; }
+.gt-script { max-height: 320px; overflow: auto; font-size: 10.5px;
+  line-height: 1.45; white-space: pre; word-break: normal; }
+
+.gt-manual-link { display: flex; gap: 12px; align-items: center;
+  padding: 12px; border: 1px solid var(--line); border-radius: 10px;
+  background: var(--panel); text-decoration: none; color: var(--text);
+  margin-top: 4px; }
+.gt-manual-link:hover { border-color: var(--accent); }
+.gt-manual-link small { color: var(--muted); font-size: 11px; }
+.gt-manual-icon { flex: none; display: grid; place-items: center;
+  width: 42px; height: 42px; border-radius: 9px; background: var(--accent);
+  color: #fff; font-size: 11px; font-weight: 800; letter-spacing: .04em; }
+
+/* ========================== penggaris & jejak ============================= */
+.gt-section-h { margin: 0 0 8px; font-size: 12px; color: var(--muted);
+  text-transform: uppercase; letter-spacing: .07em; }
+.gt-ruler .gt-row button:first-child,
+.gt-track .gt-row button { flex: 1; padding: 10px; border-radius: 9px;
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  font-weight: 700; cursor: pointer; }
+.gt-ruler .gt-btn-primary, .gt-track .gt-btn-primary {
+  border: 0; margin-top: 0; width: auto; }
+.gt-track .gt-btn-primary.is-recording { background: var(--bad);
+  animation: gt-pulse 1.6s ease-in-out infinite; }
+@keyframes gt-pulse { 50% { opacity: .62; } }
+
+/* Label jarak pada simpul penggaris. Latar solid, bukan tembus pandang:
+   di atas ortofoto terang, label transparan tidak terbaca sama sekali. */
+.gt-ruler-tip.leaflet-tooltip { background: rgba(12,21,18,.9); color: #edf3ea;
+  border: 0; border-radius: 6px; padding: 2px 7px; font-size: 11px;
+  font-family: ui-monospace, monospace; box-shadow: none; }
+.gt-ruler-tip.leaflet-tooltip::before { display: none; }
