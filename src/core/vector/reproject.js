@@ -15,8 +15,8 @@
  * tempat yang tidak masuk akal. Peta tampak kosong, kueri tetap melaporkan
  * "1 / 1 fitur cocok", dan tidak ada satu pun pesan galat.
  *
- * Ini kelas kesalahan yang sama dengan bbox GeoTIFF di core/geo/bounds.js —
- * dan sama-sama harus ditolak dengan jelas, bukan diterima diam-diam.
+ * Karena itu koordinat yang jelas-jelas terproyeksi ditolak dengan pesan yang
+ * dapat ditindaklanjuti, bukan diterima diam-diam.
  */
 
 import { epsgToDescriptor, makeTransformer } from '../geo/projection.js';

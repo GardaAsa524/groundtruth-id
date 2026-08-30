@@ -16,7 +16,6 @@ import {
 import {
   buildMatrix, computeMetrics, computeAreaAdjusted, computeBinaryValidation, matrixToCSV,
 } from '../src/core/accuracy/confusionMatrix.js';
-import { bboxToLatLngBounds, estimateOverlaySkew } from '../src/core/geo/bounds.js';
 import {
   detectVectorCRS, reprojectToWGS84, boundsOf, epsgFromCRSMember, epsgFromPRJ,
 } from '../src/core/vector/reproject.js';
@@ -369,70 +368,6 @@ t('CSV memuat baris total dan metrik', () => {
   assert.match(csv, /Overall Accuracy/);
   assert.match(csv, /Producer's Acc/);
   assert.equal(csv.split('\r\n')[0].split(';').length, 3 + 3);
-});
-
-console.log('\n== reproyeksi bbox raster ==');
-t('bbox EPSG:4326 dilewatkan tanpa diubah', () => {
-  const r = bboxToLatLngBounds([107.5, -6.9, 107.6, -6.8], 4326);
-  assert.equal(r.reprojected, false);
-  assert.deepEqual(r.bounds, [[-6.9, 107.5], [-6.8, 107.6]]);
-});
-t('bbox UTM 48S direproyeksi cocok dengan pyproj', () => {
-  // Cakupan BMTI dalam UTM 48S. Rujukan dari pyproj EPSG:32748 -> EPSG:4326:
-  //   782805, 9239000 -> 107.558964, -6.877829
-  //   783200, 9239400 -> 107.562516, -6.874195
-  const r = bboxToLatLngBounds([782805, 9239000, 783200, 9239400], 32748);
-  assert.equal(r.reprojected, true);
-  assert.equal(r.descriptor.zone, 48);
-  assert.equal(r.descriptor.south, true);
-  const [[s, w], [n, e]] = r.bounds;
-  near(w, 107.558964, 2e-5, 'bujur barat');
-  near(e, 107.562516, 2e-5, 'bujur timur');
-  near(s, -6.877829, 2e-5, 'lintang selatan');
-  near(n, -6.874195, 2e-5, 'lintang utara');
-});
-t('bbox terproyeksi tanpa EPSG ditolak, bukan diterima diam-diam', () => {
-  // Inilah kegagalan senyap yang dicegah: 783000 diperlakukan sebagai bujur.
-  const r = bboxToLatLngBounds([782805, 9239000, 783200, 9239400], null);
-  assert.equal(r.bounds, null);
-  assert.match(r.error, /EPSG|terproyeksi/i);
-});
-t('pencuplikan tepi menangkap ekstremum yang dilewatkan sudut saja', () => {
-  // Kelengkungan tepi hanya terlihat bila kotaknya MELINTASI meridian tengah.
-  // Di zona 48 (CM 105 E = easting 500000), 400000-600000 melintasinya;
-  // sepenuhnya di timur CM, lintang sepanjang tepi monoton dan sudut sudah cukup.
-  const straddle = [400000, 9200000, 600000, 9310000];
-  const full = bboxToLatLngBounds(straddle, 32748, { samples: 40 });
-  const corners = bboxToLatLngBounds(straddle, 32748, { samples: 1 });
-  const dFull = full.bounds[1][0] - full.bounds[0][0];
-  const dCorner = corners.bounds[1][0] - corners.bounds[0][0];
-  const selisihM = (dFull - dCorner) * 110540;
-  assert.ok(selisihM > 50, `pencuplikan tepi hanya menambah ${selisihM.toFixed(1)} m`);
-  console.log(`       (sudut saja melewatkan ${selisihM.toFixed(0)} m di tengah tepi)`);
-
-  // Kontrol: seluruhnya di timur CM, sudut memang sudah cukup.
-  const timur = [600000, 9200000, 710000, 9310000];
-  const fT = bboxToLatLngBounds(timur, 32748, { samples: 40 });
-  const cT = bboxToLatLngBounds(timur, 32748, { samples: 1 });
-  const dT = ((fT.bounds[1][0] - fT.bounds[0][0]) - (cT.bounds[1][0] - cT.bounds[0][0])) * 110540;
-  assert.ok(Math.abs(dT) < 1, `di timur CM seharusnya monoton, selisih ${dT}`);
-});
-t('estimateOverlaySkew memberi peringatan pada cakupan luas, diam pada cakupan kecil', () => {
-  const kecil = bboxToLatLngBounds([782805, 9239000, 783200, 9239400], 32748);
-  const sKecil = estimateOverlaySkew(kecil.bounds, kecil.descriptor);
-  assert.equal(sKecil.warn, false, `citra 400 m tidak perlu peringatan (skew ${sKecil.skewMeters})`);
-  assert.ok(sKecil.skewMeters < 5);
-
-  const luas = bboxToLatLngBounds([600000, 9200000, 710000, 9310000], 32748);
-  const sLuas = estimateOverlaySkew(luas.bounds, luas.descriptor);
-  assert.equal(sLuas.warn, true, `citra 110 km harus diberi peringatan (skew ${sLuas.skewMeters})`);
-  console.log(`       (skew imageOverlay: ${sKecil.skewMeters.toFixed(2)} m pada 400 m, ` +
-    `${sLuas.skewMeters.toFixed(0)} m pada 110 km)`);
-});
-t('CRS yang memerlukan proj4 ditolak dengan pesan yang bisa ditindaklanjuti', () => {
-  const r = bboxToLatLngBounds([100000, 200000, 110000, 210000], 23837);
-  assert.equal(r.bounds, null);
-  assert.match(r.error, /proj4/i);
 });
 
 console.log('\n== alur sampel ke matriks konfusi ==');
