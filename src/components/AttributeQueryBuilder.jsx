@@ -62,38 +62,25 @@ export function useVectorFile() {
       crs: null, needsCRS: false, bounds: null, name: null });
     try {
       const list = Array.from(files);
-      let fc;
-      let prjEPSG = null;
-      let name = list[0]?.name ?? 'vektor';
 
+      // Hanya GeoJSON. Dukungan Shapefile dilepas dengan sengaja: formatnya
+      // terdiri dari beberapa berkas yang harus dipilih bersamaan, dan pemilih
+      // berkas ganda pada peramban ponsel tidak dapat diandalkan. Pengguna
+      // sering hanya membawa .shp tanpa .dbf, sehingga tabel atributnya hilang
+      // dan seluruh modul kueri menjadi tidak berguna. GeoJSON satu berkas dan
+      // selalu membawa atributnya.
       const geojson = list.find((f) => /\.(geojson|json)$/i.test(f.name));
-      if (geojson) {
-        fc = JSON.parse(await geojson.text());
-        name = geojson.name;
-      } else {
-        const shp = (await import('shpjs')).default;
-        const zip = list.find((f) => /\.zip$/i.test(f.name));
-        if (zip) {
-          fc = await shp(await zip.arrayBuffer());
-          name = zip.name;
-        } else {
-          const get = (ext) => list.find((f) => new RegExp(`\\.${ext}$`, 'i').test(f.name));
-          const shpFile = get('shp');
-          const dbfFile = get('dbf');
-          const prjFile = get('prj');
-          if (!shpFile) throw new Error('Berkas .shp tidak ditemukan.');
-          if (!dbfFile) throw new Error('Berkas .dbf tidak ditemukan — tabel atribut wajib ada untuk kueri.');
-          const prjText = prjFile ? await prjFile.text() : undefined;
-          // .prj menyimpan CRS sumber; inilah satu-satunya sumber kebenaran
-          // yang tersedia untuk shapefile.
-          prjEPSG = epsgFromPRJ(prjText);
-          fc = shp.combine([
-            shp.parseShp(await shpFile.arrayBuffer(), prjText),
-            shp.parseDbf(await dbfFile.arrayBuffer(), get('cpg') ? await get('cpg').text() : undefined),
-          ]);
-          name = shpFile.name;
-        }
+      if (!geojson) {
+        throw new Error(
+          'Hanya berkas GeoJSON yang didukung. Bila data Anda berupa Shapefile, ' +
+          'ekspor dahulu ke GeoJSON dari QGIS atau ArcGIS ' +
+          '(klik kanan lapisan → Export → Save Features As → GeoJSON).'
+        );
       }
+      const fcText = await geojson.text();
+      let fc = JSON.parse(fcText);
+      const name = geojson.name;
+      const prjEPSG = null;
 
       if (Array.isArray(fc)) {
         fc = { type: 'FeatureCollection', features: fc.flatMap((c) => c.features) };

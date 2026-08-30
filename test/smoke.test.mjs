@@ -28,6 +28,70 @@ const t = (n, f) => {
   catch (e) { console.log(`  FAIL ${n}\n       ${e.message}`); fail++; }
 };
 
+
+/* --------------------------------------------- 0. keutuhan dependensi */
+
+console.log('\n== dependensi terdeklarasi ==');
+
+/**
+ * MENGAPA UJI INI ADA
+ * -------------------
+ * Sebuah build gagal di GitHub Actions padahal `npm run build` lokal berhasil.
+ * Sebabnya: sebuah paket dihapus dari package.json tetapi impornya masih
+ * tertinggal di kode. Secara lokal build tetap jalan karena paketnya masih
+ * fisik ada di node_modules dari pemasangan sebelumnya; CI memasang dari nol,
+ * sehingga di sanalah baru ketahuan.
+ *
+ * Pemeriksaan ini membandingkan setiap impor paket di dalam src/ terhadap
+ * daftar dependensi — tanpa bergantung pada apa yang kebetulan ada di disk.
+ */
+const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
+const declared = new Set([
+  ...Object.keys(pkg.dependencies ?? {}),
+  ...Object.keys(pkg.devDependencies ?? {}),
+]);
+
+/** Telusuri seluruh berkas sumber secara rekursif. */
+function walkSrc(dir, out = []) {
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const u = new URL(entry.name + (entry.isDirectory() ? '/' : ''), dir);
+    if (entry.isDirectory()) walkSrc(u, out);
+    else if (/\.(jsx?|mjs)$/.test(entry.name)) out.push(u);
+  }
+  return out;
+}
+
+const srcFiles = walkSrc(new URL('../src/', import.meta.url));
+const IMPORT_RE = /(?:import\s[^'"]*from\s*|import\s*\(\s*|export\s[^'"]*from\s*)['"]([^'"]+)['"]/g;
+
+const missing = new Map();
+for (const f of srcFiles) {
+  const src = readFileSync(f, 'utf8');
+  for (const m of src.matchAll(IMPORT_RE)) {
+    const spec = m[1];
+    // Lewati impor relatif, alias virtual Vite, dan URL absolut.
+    if (spec.startsWith('.') || spec.startsWith('/') || spec.startsWith('virtual:')
+        || spec.startsWith('http')) continue;
+    // Nama paket: buang subjalur, pertahankan lingkup @scope/nama.
+    const parts = spec.split('/');
+    const name = spec.startsWith('@') ? parts.slice(0, 2).join('/') : parts[0];
+    if (declared.has(name)) continue;
+    if (!missing.has(name)) missing.set(name, []);
+    missing.get(name).push(f.pathname.split('/src/')[1]);
+  }
+}
+
+t(`setiap impor paket terdaftar di package.json (${srcFiles.length} berkas dipindai)`, () => {
+  const lines = [...missing.entries()]
+    .map(([n, files]) => `${n} dipakai di ${[...new Set(files)].join(', ')}`);
+  assert.equal(
+    missing.size, 0,
+    `paket tidak terdeklarasi:\n       ${lines.join('\n       ')}\n       ` +
+    'Build lokal dapat lolos bila paketnya masih tertinggal di node_modules, ' +
+    'tetapi CI yang memasang dari nol akan gagal.'
+  );
+});
+
 /* ------------------------------------------------- 1. analisis statis JSX */
 
 console.log('\n== penempatan komponen peta ==');
