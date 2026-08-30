@@ -48,6 +48,9 @@ import {
   SymbologyPanel,
 } from './components/AttributeQueryBuilder.jsx';
 import { ExportPanel } from './components/ExportPanel.jsx';
+import { AboutPanel } from './components/AboutPanel.jsx';
+import { useSheetSync } from './hooks/useSheetSync.js';
+import { SYNC } from './core/sync/sheets.js';
 import { Compass } from './components/Compass.jsx';
 import { LayerPanel } from './components/LayerPanel.jsx';
 import { boundsOf } from './core/vector/reproject.js';
@@ -60,7 +63,7 @@ import {
   buildMatrix, computeMetrics, computeBinaryValidation, matrixToCSV,
 } from './core/accuracy/confusionMatrix.js';
 
-const TABS = ['map', 'layers', 'query', 'accuracy', 'export', 'settings'];
+const TABS = ['map', 'layers', 'query', 'accuracy', 'export', 'settings', 'about'];
 
 function Workspace() {
   const { t, nf, toggle: toggleLocale } = useLocale();
@@ -86,10 +89,18 @@ function Workspace() {
   // Panel samping dapat disembunyikan supaya peta memakai seluruh layar —
   // pada ponsel, dashboard yang selalu terbuka menyisakan peta terlalu sempit.
   const [panelOpen, setPanelOpen] = useState(true);
+  const [testing, setTesting] = useState(false);
   const [center, setCenter] = useState(null);
   const [draft, setDraft] = useState(null);      // titik menunggu diisi kelasnya
 
   const geo = useGeolocation({ toleranceMeters: 15 });
+
+  // Tandai foto sudah terkirim supaya tidak diunggah ulang pada percobaan
+  // berikutnya — inilah yang menjaga kuota data surveyor.
+  const sync = useSheetSync({
+    onSent: (ids) => setSamples((prev) => prev.map(
+      (s) => (ids.includes(s.id) ? { ...s, photosSent: true, synced: true } : s))),
+  });
   const pdf = useGeoPDF();
   const vector = useVectorFile();
 
@@ -143,16 +154,18 @@ function Workspace() {
   }, [geo.position, center, samples]);
 
   const saveSample = useCallback((data) => {
-    setSamples((prev) => [...prev, {
+    const row = {
       id: `s${Date.now()}${Math.random().toString(36).slice(2, 5)}`,
       ...data,
       // Jejak mutu ikut disimpan: pertanyaan pertama reviewer adalah seberapa
       // teliti posisi sampelnya, dan jawabannya berbeda untuk tiap sumber.
       accuracyFlagged: data.source === 'gps' && data.accuracy > geo.toleranceMeters,
       timestamp: new Date().toISOString(),
-    }]);
+    };
+    setSamples((prev) => [...prev, row]);
+    sync.push(row);
     setDraft(null);
-  }, [setSamples, geo.toleranceMeters]);
+  }, [setSamples, geo.toleranceMeters, sync]);
 
   const deleteSample = useCallback((id) => {
     setSamples((prev) => prev.filter((s) => s.id !== id));
@@ -408,6 +421,63 @@ function Workspace() {
 
             {tab === 'settings' && (
               <div className="gt-settings">
+                <section className="gt-export-group">
+                  <h4>{t('sync.title')}</h4>
+                  <p className={`gt-sync-status is-${sync.status}`}>
+                    {sync.status === SYNC.QUEUED
+                      ? t('sync.status.queued', { n: sync.pending })
+                      : t(`sync.status.${sync.status}`)}
+                  </p>
+
+                  <label className="gt-check">
+                    <input type="checkbox" checked={sync.config.enabled}
+                      onChange={(e) => sync.update({ enabled: e.target.checked })} />
+                    {t('sync.enable')}
+                  </label>
+
+                  <label className="gt-field">
+                    {t('sync.url')}
+                    <input type="url" value={sync.config.url} spellCheck={false}
+                      placeholder="https://script.google.com/macros/s/…/exec"
+                      onChange={(e) => sync.update({ url: e.target.value.trim() })} />
+                  </label>
+
+                  <label className="gt-field">
+                    {t('sync.token')}
+                    <input type="password" value={sync.config.token} spellCheck={false}
+                      onChange={(e) => sync.update({ token: e.target.value.trim() })} />
+                  </label>
+
+                  <label className="gt-check">
+                    <input type="checkbox" checked={sync.config.sendPhotos}
+                      onChange={(e) => sync.update({ sendPhotos: e.target.checked })} />
+                    {t('sync.sendPhotos')}
+                  </label>
+                  <p className="gt-hint">{t('sync.photoWarn')}</p>
+
+                  <div className="gt-row">
+                    <button type="button" onClick={async () => {
+                      setTesting(true);
+                      await sync.test();
+                      setTesting(false);
+                    }} disabled={!sync.config.url || testing}>
+                      {testing ? t('sync.testing') : t('sync.test')}
+                    </button>
+                    <button type="button" onClick={sync.flush}
+                      disabled={!sync.pending || sync.status === SYNC.SENDING}>
+                      {t('sync.flush')}
+                    </button>
+                  </div>
+
+                  {sync.lastError && <p className="gt-gps-alert">{sync.lastError}</p>}
+                  {sync.lastOk && !sync.lastError && (
+                    <p className="gt-export-ok">
+                      {t('sync.ok', { t: new Date(sync.lastOk).toLocaleTimeString() })}
+                    </p>
+                  )}
+                  <p className="gt-hint">{t('sync.setupHint')}</p>
+                </section>
+
                 <label className="gt-check">
                   <input type="checkbox" checked={allowGoogle}
                     onChange={(e) => setAllowGoogle(e.target.checked)} />
@@ -416,6 +486,9 @@ function Workspace() {
                 <p className="gt-hint">{t('basemap.googleHidden')}</p>
               </div>
             )}
+
+            {tab === 'about' && <AboutPanel />}
+
           </div>
         </aside>
 

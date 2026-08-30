@@ -251,6 +251,14 @@ try {
 
   const root = createRoot(document.getElementById('root'));
   await act(async () => { root.render(React.createElement(App)); });
+
+  // Geoman dimuat lewat impor dinamis; beri waktu janji-janjinya selesai
+  // sebelum memeriksa DOM.
+  for (let i = 0; i < 40; i++) {
+    await act(async () => { await new Promise((r) => setTimeout(r, 25)); });
+    if (/leaflet-pm-toolbar|leaflet-pm-draw/.test(
+      document.getElementById('root').innerHTML)) break;
+  }
   html = document.getElementById('root').innerHTML;
 } catch (e) {
   mountError = e;
@@ -270,6 +278,28 @@ t('elemen kunci antarmuka tergambar', () => {
   for (const cls of ['gt-app', 'gt-sidebar', 'gt-map-wrap', 'gt-tabs']) {
     assert.ok(html.includes(cls), `kelas "${cls}" tidak ditemukan pada hasil render`);
   }
+});
+
+/**
+ * Kendali digitasi harus benar-benar terpasang, bukan sekadar tidak melempar
+ * galat.
+ *
+ * Bug yang memunculkan uji ini: DrawingTools memuat Geoman lewat impor dinamis
+ * di dalam useEffect. Salah satu dependensi effect berubah identitasnya pada
+ * setiap render (`defaultProperties = {}` menghasilkan objek baru tiap kali),
+ * sehingga effect dibongkar dan dipasang ulang terus-menerus. Fungsi pembersih
+ * menyetel `disposed = true` sebelum impor dinamisnya selesai, dan badan effect
+ * keluar lebih awal tanpa pernah memanggil addControls.
+ *
+ * Kegagalannya sepenuhnya senyap: tidak ada galat, tidak ada peringatan, dan
+ * seluruh uji lain tetap hijau. Yang hilang hanya bilah alat gambar di peta.
+ */
+t('kendali digitasi Geoman benar-benar terpasang di peta', () => {
+  const html2 = document.getElementById('root').innerHTML;
+  assert.ok(
+    /leaflet-pm-toolbar|leaflet-pm-draw/.test(html2),
+    'bilah alat Geoman tidak ada di DOM — kendali gambar tidak terpasang'
+  );
 });
 
 t('tidak ada galat React yang tercatat', () => {

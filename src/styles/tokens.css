@@ -314,3 +314,28 @@ body { margin: 0; background: var(--bg); color: var(--text);
 .gt-export-group button:disabled { opacity: .45; cursor: not-allowed; }
 .gt-export-ok { color: var(--ok); font-size: 12.5px; margin-top: 8px; }
 .gt-export-warn { border-left: 3px solid var(--warn); padding-left: 10px; }
+
+/* ============================= tentang & sinkron ========================== */
+.gt-about { font-size: 13.5px; line-height: 1.65; }
+.gt-about h2 { margin: 0; font-size: 26px; letter-spacing: .04em; }
+.gt-about h3 { margin: 20px 0 8px; font-size: 14px; color: var(--accent);
+  text-transform: uppercase; letter-spacing: .07em; }
+.gt-about p { margin: 0 0 10px; }
+.gt-about-mark { display: flex; gap: 14px; align-items: center;
+  padding-bottom: 14px; border-bottom: 1px solid var(--line); }
+.gt-about-mark p { margin: 2px 0 0; font-size: 12px; color: var(--muted); }
+.gt-about-by { font-weight: 700; color: var(--accent) !important; }
+.gt-about-name { font-size: 16px; font-weight: 700; margin-bottom: 4px !important; }
+.gt-about-affil { font-size: 12px; color: var(--muted); }
+.gt-about-list { margin: 0; padding-left: 18px; }
+.gt-about-list li { margin-bottom: 6px; }
+.gt-about-foot { margin-top: 20px; padding-top: 12px;
+  border-top: 1px solid var(--line); font-size: 11.5px; color: var(--muted); }
+
+.gt-sync-status { font-size: 12px; font-weight: 700; margin: 0 0 10px;
+  padding: 5px 10px; border-radius: 999px; display: inline-block; }
+.gt-sync-status.is-off { background: var(--panel); color: var(--muted); }
+.gt-sync-status.is-idle { background: color-mix(in srgb, var(--ok) 18%, transparent); color: var(--ok); }
+.gt-sync-status.is-sending { background: color-mix(in srgb, #2bd9f0 18%, transparent); color: #2bd9f0; }
+.gt-sync-status.is-queued { background: color-mix(in srgb, var(--warn) 18%, transparent); color: var(--warn); }
+.gt-sync-status.is-error { background: color-mix(in srgb, var(--bad) 18%, transparent); color: var(--bad); }

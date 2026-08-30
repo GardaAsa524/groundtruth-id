@@ -19,7 +19,22 @@
 
 import React, { useEffect, useRef, useCallback, useState } from 'react';
 import { useMap } from 'react-leaflet';
-import L from 'leaflet';
+
+// URUTAN KETIGA IMPOR DI BAWAH INI PENTING DAN TIDAK BOLEH DIUBAH.
+//
+// Geoman memasang dirinya ke Leaflet lewat L.Map.addInitHook, yang hanya
+// berlaku untuk instans peta yang dibuat SESUDAH ia dimuat. Ketika Geoman
+// dimuat lewat impor dinamis di dalam useEffect, ia selalu selesai setelah
+// MapContainer membuat petanya — sehingga map.pm tidak pernah ada dan bilah
+// alat gambar tidak pernah muncul, tanpa satu pun pesan galat.
+//
+// Impor statis menyelesaikannya: modul dievaluasi sebelum render pertama.
+// leafletGlobal harus lebih dahulu karena ia yang menyediakan variabel global
+// `L` yang dicari Geoman.
+import L from '../core/geo/leafletGlobal.js';
+import '@geoman-io/leaflet-geoman-free';
+import '@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css';
+
 import { useLocale } from '../context/AppProviders.jsx';
 
 /**
@@ -35,11 +50,31 @@ import { useLocale } from '../context/AppProviders.jsx';
  * @param {object} controlsRef ref yang akan diisi { clearAll, addFeature }
  *        supaya panel samping dapat memerintah tanpa perlu akses ke peta.
  */
-export function DrawingTools({ onChange, defaultProperties = {}, controlsRef }) {
+/**
+ * Objek kosong bersama, dideklarasikan di luar komponen.
+ *
+ * INI BUKAN SEKADAR KERAPIAN. Menulis `defaultProperties = {}` sebagai nilai
+ * bawaan parameter menghasilkan objek BARU pada setiap render. Bila objek itu
+ * masuk ke daftar dependensi, seluruh rantai useCallback dan useEffect di
+ * bawahnya ikut berubah identitas tiap render — dan effect yang memuat Geoman
+ * secara asinkron akan dibongkar sebelum impornya selesai, sehingga kendalinya
+ * tidak pernah terpasang. Kegagalannya sepenuhnya senyap.
+ */
+const NO_PROPS = Object.freeze({});
+
+export function DrawingTools({ onChange, defaultProperties = NO_PROPS, controlsRef }) {
   const map = useMap();
   const { t, locale } = useLocale();
   const groupRef = useRef(null);
   const [count, setCount] = useState(0);
+
+  // onChange dan defaultProperties disimpan di ref, bukan dijadikan dependensi.
+  // Effect pemasangan Geoman harus berjalan SEKALI per instans peta; ia tidak
+  // boleh ikut terpengaruh oleh identitas prop yang berubah tiap render.
+  const onChangeRef = useRef(onChange);
+  const propsRef = useRef(defaultProperties);
+  useEffect(() => { onChangeRef.current = onChange; }, [onChange]);
+  useEffect(() => { propsRef.current = defaultProperties; }, [defaultProperties]);
 
   const emit = useCallback(() => {
     const g = groupRef.current;
@@ -54,37 +89,29 @@ export function DrawingTools({ onChange, defaultProperties = {}, controlsRef }) 
       if (lyr instanceof L.Circle) {
         f.properties = { ...f.properties, _geom: 'circle', radius_m: lyr.getRadius() };
       }
-      f.properties = { ...defaultProperties, ...(f.properties ?? {}), _id: lyr._gtId };
+      f.properties = { ...propsRef.current, ...(f.properties ?? {}), _id: lyr._gtId };
       features.push(f);
     });
     setCount(features.length);
-    onChange?.({ type: 'FeatureCollection', features });
-  }, [onChange, defaultProperties]);
+    onChangeRef.current?.({ type: 'FeatureCollection', features });
+  }, []);   // stabil seumur komponen — lihat catatan NO_PROPS di atas
 
   useEffect(() => {
     if (!map) return undefined;
-    let disposed = false;
 
-    (async () => {
-      // Geoman adalah plugin Leaflet gaya lama: berkas dist-nya mengacu ke
-      // variabel global `L`, bukan mengimpor leaflet sebagai modul. Dalam
-      // bundel ESM, `L` tidak pernah menjadi global, sehingga plugin gagal
-      // dimuat dengan "ReferenceError: L is not defined" dan menjatuhkan
-      // seluruh aplikasi. Menyediakan globalnya sebelum impor adalah pola baku
-      // untuk plugin Leaflet di Vite.
-      // Ditulis ke globalThis, bukan window: di peramban keduanya objek yang
-      // sama, tetapi pencarian variabel bebas selalu berakhir di globalThis.
-      if (typeof globalThis !== 'undefined' && !globalThis.L) globalThis.L = L;
-
-      // Muat saat dibutuhkan; Geoman ~90 kB tergzip.
-      await import('@geoman-io/leaflet-geoman-free');
-      await import('@geoman-io/leaflet-geoman-free/dist/leaflet-geoman.css');
-      if (disposed || !map.pm) return;
+    {
+      if (!map.pm) {
+        // Gagal senyap adalah yang membuat bug ini bertahan lama: bilah alat
+        // hilang tanpa satu pun pesan. Sekarang ia berbicara.
+        console.error(
+          'Geoman tidak terpasang pada instans peta. Kendali gambar tidak akan muncul.'
+        );
+        return undefined;
+      }
 
       const group = L.featureGroup().addTo(map);
       groupRef.current = group;
 
-      map.pm.setLang(locale === 'id' ? 'id' : 'en');
       map.pm.addControls({
         position: 'topleft',
         drawMarker: true,
@@ -125,7 +152,6 @@ export function DrawingTools({ onChange, defaultProperties = {}, controlsRef }) 
       map.on('pm:remove', onRemove);
       map.on('pm:cut', emit);
 
-      // Bersih-bersih dikembalikan lewat closure di bawah.
       groupRef.current._cleanup = () => {
         map.off('pm:create', onCreate);
         map.off('pm:remove', onRemove);
@@ -133,14 +159,20 @@ export function DrawingTools({ onChange, defaultProperties = {}, controlsRef }) 
         map.pm.removeControls();
         map.removeLayer(group);
       };
-    })();
+    }
 
     return () => {
-      disposed = true;
       groupRef.current?._cleanup?.();
       groupRef.current = null;
     };
-  }, [map, locale, emit]);
+    // HANYA `map`. Menambahkan `locale` atau `emit` di sini mengembalikan bug
+    // pemasangan-ulang; bahasa Geoman diperbarui lewat effect terpisah di bawah.
+  }, [map]);   // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Bahasa kendali diubah tanpa membongkar seluruh pemasangan.
+  useEffect(() => {
+    if (map?.pm) map.pm.setLang(locale === 'id' ? 'id' : 'en');
+  }, [map, locale]);
 
   /** Menambahkan geometri dari luar, misalnya hasil kueri atribut. */
   const addFeature = useCallback((geojson) => {

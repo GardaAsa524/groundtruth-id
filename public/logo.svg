@@ -1,0 +1,95 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512"
+     width="512" height="512" role="img" aria-label="REIS">
+  <title>REIS — Remote Sensing Evaluation &amp; Inspection Survey</title>
+  <rect width="512.0" height="512.0" rx="113" fill="#0c1512"/>
+  <g>
+    <!-- jaring rhumb: pancaran arah khas peta portolan -->
+    <line x1="256.00" y1="176.44" x2="256.00" y2="66.56" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="271.52" y1="177.96" x2="292.96" y2="70.20" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="286.45" y1="182.49" x2="328.50" y2="80.98" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="300.20" y1="189.84" x2="361.25" y2="98.49" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="312.26" y1="199.74" x2="389.95" y2="122.05" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="322.16" y1="211.80" x2="413.51" y2="150.75" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="329.51" y1="225.55" x2="431.02" y2="183.50" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="334.04" y1="240.48" x2="441.80" y2="219.04" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="335.56" y1="256.00" x2="445.44" y2="256.00" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="334.04" y1="271.52" x2="441.80" y2="292.96" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="329.51" y1="286.45" x2="431.02" y2="328.50" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="322.16" y1="300.20" x2="413.51" y2="361.25" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="312.26" y1="312.26" x2="389.95" y2="389.95" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="300.20" y1="322.16" x2="361.25" y2="413.51" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="286.45" y1="329.51" x2="328.50" y2="431.02" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="271.52" y1="334.04" x2="292.96" y2="441.80" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="256.00" y1="335.56" x2="256.00" y2="445.44" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="240.48" y1="334.04" x2="219.04" y2="441.80" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="225.55" y1="329.51" x2="183.50" y2="431.02" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="211.80" y1="322.16" x2="150.75" y2="413.51" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="199.74" y1="312.26" x2="122.05" y2="389.95" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="189.84" y1="300.20" x2="98.49" y2="361.25" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="182.49" y1="286.45" x2="80.98" y2="328.50" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="177.96" y1="271.52" x2="70.20" y2="292.96" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="176.44" y1="256.00" x2="66.56" y2="256.00" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="177.96" y1="240.48" x2="70.20" y2="219.04" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="182.49" y1="225.55" x2="80.98" y2="183.50" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="189.84" y1="211.80" x2="98.49" y2="150.75" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="199.74" y1="199.74" x2="122.05" y2="122.05" stroke="#e8b33c" stroke-width="1.1" opacity="0.42"/>
+    <line x1="211.80" y1="189.84" x2="150.75" y2="98.49" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="225.55" y1="182.49" x2="183.50" y2="80.98" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+    <line x1="240.48" y1="177.96" x2="219.04" y2="70.20" stroke="#e8b33c" stroke-width="1.1" opacity="0.16"/>
+
+    <!-- lingkaran pembatas, seperti cincin mawar angin pada Kitab-i Bahriye -->
+    <circle cx="256.0" cy="256.0" r="189.4" fill="none"
+            stroke="#e8b33c" stroke-width="3" opacity="0.75"/>
+    <circle cx="256.0" cy="256.0" r="162.9" fill="none"
+            stroke="#e8b33c" stroke-width="1.2" opacity="0.4"/>
+
+    <!-- mawar angin 16 arah -->
+    <path d="M256.00,96.87 L234.21,256.00 L256.00,256.00 Z" fill="#ff2e88"/>
+    <path d="M256.00,96.87 L277.79,256.00 L256.00,256.00 Z" fill="#a30050"/>
+    <path d="M289.35,175.49 L243.52,250.83 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M289.35,175.49 L268.48,261.17 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M368.52,143.48 L240.60,240.60 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M368.52,143.48 L271.40,271.40 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M336.51,222.65 L250.83,243.52 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M336.51,222.65 L261.17,268.48 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M415.13,256.00 L256.00,234.21 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M415.13,256.00 L256.00,277.79 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M336.51,289.35 L261.17,243.52 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M336.51,289.35 L250.83,268.48 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M368.52,368.52 L271.40,240.60 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M368.52,368.52 L240.60,271.40 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M289.35,336.51 L268.48,250.83 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M289.35,336.51 L243.52,261.17 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M256.00,415.13 L277.79,256.00 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M256.00,415.13 L234.21,256.00 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M222.65,336.51 L268.48,261.17 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M222.65,336.51 L243.52,250.83 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M143.48,368.52 L271.40,271.40 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M143.48,368.52 L240.60,240.60 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M175.49,289.35 L261.17,268.48 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M175.49,289.35 L250.83,243.52 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M96.87,256.00 L256.00,277.79 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M96.87,256.00 L256.00,234.21 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M175.49,222.65 L250.83,268.48 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M175.49,222.65 L261.17,243.52 L256.00,256.00 Z" fill="#6b521c"/>
+    <path d="M143.48,143.48 L240.60,271.40 L256.00,256.00 Z" fill="#e8b33c"/>
+    <path d="M143.48,143.48 L271.40,240.60 L256.00,256.00 Z" fill="#8a6a24"/>
+    <path d="M222.65,175.49 L243.52,261.17 L256.00,256.00 Z" fill="#c9992f"/>
+    <path d="M222.65,175.49 L268.48,250.83 L256.00,256.00 Z" fill="#6b521c"/>
+
+    <!-- pusat: bidik silang, titik kontrol yang diverifikasi di lapangan -->
+    <circle cx="256.0" cy="256.0" r="44.5" fill="#0c1512"
+            stroke="#e8b33c" stroke-width="3"/>
+    <circle cx="256.0" cy="256.0" r="33.2" fill="none"
+            stroke="#ff2e88" stroke-width="2.5" opacity="0.9"/>
+    <circle cx="256.0" cy="256.0" r="10.4" fill="#ff2e88"/>
+    <line x1="211.5" y1="256.0" x2="234.2" y2="256.0"
+          stroke="#ff2e88" stroke-width="4" stroke-linecap="round"/>
+    <line x1="277.8" y1="256.0" x2="300.5" y2="256.0"
+          stroke="#ff2e88" stroke-width="4" stroke-linecap="round"/>
+    <line x1="256.0" y1="211.5" x2="256.0" y2="234.2"
+          stroke="#ff2e88" stroke-width="4" stroke-linecap="round"/>
+    <line x1="256.0" y1="277.8" x2="256.0" y2="300.5"
+          stroke="#ff2e88" stroke-width="4" stroke-linecap="round"/>
+  </g>
+</svg>
