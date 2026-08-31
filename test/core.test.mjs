@@ -22,6 +22,7 @@ import {
 import {
   uniqueValues, buildColorMap, styleFor, legendEntries, PALETTE, OTHER_COLOR,
 } from '../src/core/vector/style.js';
+import { heatPoints, buildGradientLUT, HEAT_MODES } from '../src/core/accuracy/heat.js';
 
 let pass = 0, fail = 0;
 const t = (name, fn) => {
@@ -549,6 +550,76 @@ t('legenda memuat label, warna, dan jumlah', () => {
   assert.equal(L.length, 4);
   assert.ok(L.every((e) => e.color && e.label && Number.isFinite(e.count)));
   assert.ok(L.some((e) => e.label === '(kosong)'));
+});
+
+console.log('\n== peta panas akurasi ==');
+const HS = [
+  { lat: -6.8740, lon: 107.5620, isCorrect: true },
+  { lat: -6.8741, lon: 107.5621, isCorrect: false },
+  { lat: -6.8742, lon: 107.5622, isCorrect: false },
+  // Jauh dari gugus di atas (sekitar 1,1 km ke selatan)
+  { lat: -6.8840, lon: 107.5620, isCorrect: true },
+  { lat: -6.8841, lon: 107.5621, isCorrect: true },
+];
+
+t('mode ALL memakai seluruh titik dengan bobot sama', () => {
+  const p = heatPoints(HS, HEAT_MODES.ALL);
+  assert.equal(p.length, 5);
+  assert.ok(p.every((x) => x.weight === 1));
+});
+t('mode ERRORS hanya memuat titik tidak sesuai', () => {
+  const p = heatPoints(HS, HEAT_MODES.ERRORS);
+  assert.equal(p.length, 2);
+  assert.ok(p.every((x) => x.weight === 1));
+});
+t('mode ACCURACY memberi bobot dari rasio kesalahan setempat', () => {
+  const p = heatPoints(HS, HEAT_MODES.ACCURACY, { radiusMeters: 60 });
+  // Gugus utara: 3 titik, 2 salah -> rasio 2/3 untuk ketiganya.
+  const utara = p.filter((x) => x.lat > -6.88);
+  assert.equal(utara.length, 3, 'ketiga titik gugus utara harus menyala');
+  for (const x of utara) {
+    assert.ok(Math.abs(x.weight - 2 / 3) < 1e-9, `bobot ${x.weight}`);
+  }
+});
+t('gugus tanpa kesalahan tidak ikut menyala pada mode ACCURACY', () => {
+  const p = heatPoints(HS, HEAT_MODES.ACCURACY, { radiusMeters: 60 });
+  assert.equal(p.filter((x) => x.lat < -6.88).length, 0,
+    'gugus selatan seluruhnya benar, seharusnya tidak muncul');
+});
+t('titik benar yang dikelilingi kesalahan tetap menyala', () => {
+  // Yang dipetakan adalah keadaan wilayah, bukan nasib satu titik.
+  const p = heatPoints(HS, HEAT_MODES.ACCURACY, { radiusMeters: 60 });
+  assert.ok(p.some((x) => Math.abs(x.lat - -6.8740) < 1e-9),
+    'titik benar di dalam gugus bermasalah seharusnya ikut menyala');
+});
+t('radius kecil memisahkan gugus yang berjauhan', () => {
+  const sempit = heatPoints(HS, HEAT_MODES.ACCURACY, { radiusMeters: 5 });
+  // Pada radius 5 m tiap titik hanya melihat dirinya sendiri, jadi hanya
+  // titik yang salah itu sendiri yang berbobot 1.
+  assert.equal(sempit.length, 2);
+  assert.ok(sempit.every((x) => x.weight === 1));
+});
+t('koordinat tidak sah disaring, bukan merusak kanvas', () => {
+  const p = heatPoints([{ lat: NaN, lon: 107, isCorrect: false }], HEAT_MODES.ERRORS);
+  assert.equal(p.length, 0);
+});
+t('daftar kosong menghasilkan larik kosong', () => {
+  assert.deepEqual(heatPoints([], HEAT_MODES.ALL), []);
+  assert.deepEqual(heatPoints(null, HEAT_MODES.ERRORS), []);
+});
+
+t('tabel gradien berukuran benar dan menaik mulus', () => {
+  const lut = buildGradientLUT();
+  assert.equal(lut.length, 256 * 4);
+  assert.equal(lut[3], 0, 'ujung bawah harus tembus pandang');
+  assert.ok(lut[255 * 4 + 3] > 200, 'ujung atas harus pekat');
+  // Alpha harus menaik monoton; gradien yang turun di tengah membuat
+  // gumpalan pekat justru tampak lebih pudar daripada tepinya.
+  let turun = 0;
+  for (let i = 1; i < 256; i++) {
+    if (lut[i * 4 + 3] < lut[(i - 1) * 4 + 3] - 1) turun++;
+  }
+  assert.equal(turun, 0, `alpha turun ${turun} kali`);
 });
 
 console.log(`\n${pass} lulus, ${fail} gagal\n`);

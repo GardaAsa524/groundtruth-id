@@ -106,20 +106,6 @@ export function AboutPanel() {
         <p className="gt-hint">{t('about.feedbackHint')}</p>
       </section>
 
-      <section>
-        <h3>{t('about.feedbackTitle')}</h3>
-        <p>{t('about.feedbackIntro')}</p>
-        <a className="gt-manual-link" href="https://forms.gle/FUqyoPKNu2C5kyx37"
-           target="_blank" rel="noopener noreferrer">
-          <span className="gt-manual-icon is-report">!</span>
-          <span>
-            <strong>{t('about.feedbackLink')}</strong>
-            <br /><small>{t('about.feedbackMeta')}</small>
-          </span>
-        </a>
-        <p className="gt-hint">{t('about.feedbackHint')}</p>
-      </section>
-
       <p className="gt-about-foot">
         {t('about.license')}
       </p>

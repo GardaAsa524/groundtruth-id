@@ -49,6 +49,11 @@ import {
 } from './components/AttributeQueryBuilder.jsx';
 import { ExportPanel } from './components/ExportPanel.jsx';
 import { AboutPanel } from './components/AboutPanel.jsx';
+import {
+  ConfusionMatrixChart, ClassAccuracyChart, AgreementBar,
+} from './components/AccuracyCharts.jsx';
+import { HeatOverlay } from './components/HeatOverlay.jsx';
+import { HEAT_MODES } from './core/accuracy/heat.js';
 import { useSheetSync } from './hooks/useSheetSync.js';
 import { SYNC } from './core/sync/sheets.js';
 import { Compass } from './components/Compass.jsx';
@@ -97,6 +102,7 @@ function Workspace() {
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerMode, setRulerMode] = useState('distance');
   const [rulerPoints, setRulerPoints] = useState([]);
+  const [heatMode, setHeatMode] = useState('off');
   const [center, setCenter] = useState(null);
   const [draft, setDraft] = useState(null);      // titik menunggu diisi kelasnya
 
@@ -349,24 +355,6 @@ function Workspace() {
                 </div>
 
                 <hr />
-                <label className="gt-field">
-                  GeoPDF
-                  <input type="file" accept="application/pdf"
-                    onChange={(e) => e.target.files[0] && pdf.load(e.target.files[0])} />
-                </label>
-                {pdf.status === 'error' && <p className="gt-gps-alert">{pdf.error}</p>}
-                {pdf.doc && (
-                  <>
-                    <GeoPDFQualityPanel doc={pdf.doc} t={t} nf={nf} />
-                    <label className="gt-slider">
-                      Transparansi {Math.round(pdfOpacity * 100)}%
-                      <input type="range" min="0" max="1" step="0.05" value={pdfOpacity}
-                        onChange={(e) => setPdfOpacity(parseFloat(e.target.value))} />
-                    </label>
-                  </>
-                )}
-
-                <hr />
                 <Compass />
 
                 <hr />
@@ -379,52 +367,89 @@ function Workspace() {
             )}
 
             {tab === 'layers' && (
-              <LayerPanel
-                layers={layers}
-                onChange={updateLayer}
-                onZoom={zoomTo}
-                onRemove={removeLayer}
-              />
+              <>
+                {/*
+                  GeoPDF dan GeoJSON disatukan di sini. Sebelumnya keduanya
+                  tersebar di tab berbeda, sehingga tidak ada satu tempat pun
+                  untuk menjawab "bagaimana saya menambah data" — pertanyaan
+                  pertama setiap pengguna baru.
+                */}
+                <h3 className="gt-section-h">{t('layers.add')}</h3>
+
+                <label className="gt-addlayer">
+                  <span className="gt-addlayer-icon">PDF</span>
+                  <span className="gt-addlayer-text">
+                    <strong>GeoPDF</strong>
+                    <small>{t('layers.addPdfHint')}</small>
+                  </span>
+                  <input type="file" accept="application/pdf"
+                    onChange={(e) => e.target.files[0] && pdf.load(e.target.files[0])} />
+                </label>
+                {pdf.status === 'parsing' && <p className="gt-hint">{t('layers.parsing')}</p>}
+                {pdf.status === 'rendering' && <p className="gt-hint">{t('layers.rendering')}</p>}
+                {pdf.status === 'error' && <p className="gt-gps-alert">{pdf.error}</p>}
+                {pdf.doc && (
+                  <details className="gt-details">
+                    <summary>{t('layers.pdfQuality')}</summary>
+                    <GeoPDFQualityPanel doc={pdf.doc} t={t} nf={nf} />
+                    <label className="gt-slider">
+                      {t('raster.opacity')} {Math.round(pdfOpacity * 100)}%
+                      <input type="range" min="0" max="1" step="0.05" value={pdfOpacity}
+                        onChange={(e) => setPdfOpacity(parseFloat(e.target.value))} />
+                    </label>
+                  </details>
+                )}
+
+                <label className="gt-addlayer">
+                  <span className="gt-addlayer-icon is-vector">GEO</span>
+                  <span className="gt-addlayer-text">
+                    <strong>GeoJSON</strong>
+                    <small>{t('layers.addVectorHint')}</small>
+                  </span>
+                  <input type="file" accept=".geojson,.json"
+                    onChange={(e) => e.target.files.length && vector.load(e.target.files)} />
+                </label>
+                {vector.status === 'loading' && <p className="gt-hint">{t('layers.parsing')}</p>}
+                {vector.status === 'error' && <p className="gt-gps-alert">{vector.error}</p>}
+                <CRSPrompt vector={vector} onPick={vector.applyCRS} />
+                {vector.crs?.reprojected && (
+                  <p className="gt-hint">{t('vector.reprojected', { epsg: vector.crs.epsg })}</p>
+                )}
+
+                <hr />
+                <LayerPanel
+                  layers={layers}
+                  onChange={updateLayer}
+                  onZoom={zoomTo}
+                  onRemove={removeLayer}
+                />
+              </>
             )}
 
             {tab === 'query' && (
               <>
-                <label className="gt-field">
-                  GeoJSON / Shapefile
-                  <input type="file" multiple accept=".geojson,.json,.zip,.shp,.dbf,.prj,.cpg"
-                    onChange={(e) => e.target.files.length && vector.load(e.target.files)} />
-                </label>
-                {vector.status === 'error' && <p className="gt-gps-alert">{vector.error}</p>}
-
-                <CRSPrompt vector={vector} onPick={vector.applyCRS} />
+                {!vector.fc && <p className="gt-hint">{t('query.loadFirst')}</p>}
 
                 {vector.fc && (
                   <>
                     <div className="gt-row">
                       <button type="button" onClick={() => zoomTo(vector.bounds)}>
-                        ⤢ {t('layers.zoomTo')}
+                        {t('layers.zoomTo')}
                       </button>
                       <div className="gt-seg">
                         {['dim', 'hide'].map((m) => (
                           <button key={m} type="button" className={filterMode === m ? 'is-on' : ''}
                             onClick={() => setFilterMode(m)}>
-                            {m === 'dim' ? 'Redupkan' : 'Sembunyikan'}
+                            {m === 'dim' ? t('vector.dim') : t('vector.hide')}
                           </button>
                         ))}
                       </div>
                     </div>
-                    {vector.crs?.reprojected && (
-                      <p className="gt-hint">
-                        {t('vector.reprojected', { epsg: vector.crs.epsg })}
-                      </p>
-                    )}
+                    <SymbologyPanel fc={vector.fc} schema={vector.schema}
+                      value={symbology} onChange={setSymbology} />
                   </>
                 )}
 
-                {vector.fc && (
-                  <SymbologyPanel fc={vector.fc} schema={vector.schema}
-                    value={symbology} onChange={setSymbology} />
-                )}
                 <AttributeQueryBuilder fc={vector.fc} schema={vector.schema} onResult={setQueryResult} />
               </>
             )}
@@ -433,6 +458,7 @@ function Workspace() {
               <AccuracyPanel
                 metrics={metrics} binary={binary} samples={samples}
                 onExport={exportCSV} t={t} nf={nf}
+                heatMode={heatMode} onHeatMode={setHeatMode}
               />
             )}
 
@@ -555,6 +581,7 @@ function Workspace() {
             {/* Wajib di dalam MapContainer: memanggil useMap(). */}
             <DrawingTools onChange={setDrawnFeatures} controlsRef={drawControls} />
 
+            <HeatOverlay samples={samples} mode={heatMode} />
             <TrackLayer points={track.points} recording={track.recording} />
             <RulerLayer
               active={rulerActive}
@@ -603,16 +630,42 @@ function Workspace() {
   );
 }
 
-function AccuracyPanel({ metrics, binary, samples, onExport, t, nf }) {
-  if (!samples.length) return <p className="gt-hint">Belum ada sampel validasi.</p>;
+function AccuracyPanel({ metrics, binary, samples, onExport, t, nf,
+                        heatMode, onHeatMode }) {
+  if (!samples.length) return <p className="gt-hint">{t('accuracy.noSamples')}</p>;
+
+  const ditandai = samples.filter((s) => s.accuracyFlagged).length;
 
   return (
     <div className="gt-accuracy">
-      <p><strong>{samples.length}</strong> sampel · {samples.filter((s) => s.accuracyFlagged).length} bertanda akurasi rendah</p>
+      <p><strong>{samples.length}</strong> {t('export.pointsUnit')}
+        {ditandai > 0 && <> · {ditandai} {t('accuracy.flagged')}</>}</p>
+
+      <AgreementBar samples={samples} />
+
+      {/*
+        Peta panas ditempatkan di tab Akurasi, bukan tab Peta, karena ia bagian
+        dari analisis hasil — bukan alat navigasi. Mode "sebaran kesalahan"
+        didahulukan: itulah yang menghasilkan temuan, sedangkan kerapatan
+        seluruh sampel hanya menjawab di mana kita pernah berjalan.
+      */}
+      <h4 className="gt-section-h" style={{ marginTop: 16 }}>{t('heat.title')}</h4>
+      <div className="gt-seg gt-full-seg">
+        {[
+          ['off', t('heat.off')],
+          [HEAT_MODES.ERRORS, t('heat.errors')],
+          [HEAT_MODES.ACCURACY, t('heat.rate')],
+          [HEAT_MODES.ALL, t('heat.all')],
+        ].map(([k, label]) => (
+          <button key={k} type="button" className={heatMode === k ? 'is-on' : ''}
+            onClick={() => onHeatMode(k)}>{label}</button>
+        ))}
+      </div>
+      <p className="gt-hint">{t(`heat.hint.${heatMode}`)}</p>
 
       {metrics ? (
         <>
-          <dl className="gt-quality">
+          <dl className="gt-quality" style={{ marginTop: 16 }}>
             <div><dt>{t('accuracy.oa')}</dt>
               <dd className="mono">{nf(metrics.overallAccuracy * 100, 2)}%
                 <small> [{nf(metrics.overallAccuracyCI95[0] * 100, 1)}–{nf(metrics.overallAccuracyCI95[1] * 100, 1)}]</small>
@@ -621,32 +674,38 @@ function AccuracyPanel({ metrics, binary, samples, onExport, t, nf }) {
             <div><dt>{t('accuracy.macroF1')}</dt><dd className="mono">{nf(metrics.macroF1, 4)}</dd></div>
           </dl>
 
-          <table className="gt-matrix">
-            <thead>
-              <tr><th>Kelas</th><th>UA</th><th>PA</th><th>F1</th><th>n</th></tr>
-            </thead>
-            <tbody>
-              {metrics.perClass.map((c) => (
-                <tr key={c.name}>
-                  <td>{c.name}</td>
-                  <td className="mono">{nf(c.usersAccuracy, 3)}</td>
-                  <td className="mono">{nf(c.producersAccuracy, 3)}</td>
-                  <td className="mono">{nf(c.f1, 3)}</td>
-                  <td className="mono">{c.mapped}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+          <ClassAccuracyChart metrics={metrics} />
+          <ConfusionMatrixChart cm={metrics.cm} metrics={metrics} />
+
+          <details className="gt-details">
+            <summary>{t('accuracy.table')}</summary>
+            <table className="gt-matrix">
+              <thead>
+                <tr><th>{t('accuracy.class')}</th><th>UA</th><th>PA</th><th>F1</th><th>n</th></tr>
+              </thead>
+              <tbody>
+                {metrics.perClass.map((c) => (
+                  <tr key={c.name}>
+                    <td>{c.name}</td>
+                    <td className="mono">{nf(c.usersAccuracy, 3)}</td>
+                    <td className="mono">{nf(c.producersAccuracy, 3)}</td>
+                    <td className="mono">{nf(c.f1, 3)}</td>
+                    <td className="mono">{c.mapped}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </details>
 
           <button type="button" className="gt-btn-primary" onClick={onExport}>
-            Unduh matriks (CSV)
+            {t('accuracy.downloadCSV')}
           </button>
         </>
       ) : (
         <>
-          <p className="gt-hint">{binary.limitation}</p>
+          <p className="gt-hint" style={{ marginTop: 14 }}>{binary.limitation}</p>
           <dl className="gt-quality">
-            <div><dt>Tingkat kesesuaian</dt>
+            <div><dt>{t('accuracy.agreementRate')}</dt>
               <dd className="mono">{nf(binary.overallCorrectRate * 100, 1)}%</dd></div>
           </dl>
         </>
