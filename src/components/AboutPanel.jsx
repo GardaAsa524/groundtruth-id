@@ -10,6 +10,9 @@
 import React from 'react';
 import { useLocale } from '../context/AppProviders.jsx';
 
+/** Formulir laporan bug dan saran. */
+const BUG_REPORT_URL = 'https://forms.gle/FUqyoPKNu2C5kyx37';
+
 export function AboutPanel() {
   const { t, locale } = useLocale();
 
@@ -38,6 +41,23 @@ export function AboutPanel() {
         <p className="gt-about-affil">
           Sains Informasi Geografi · Universitas Pendidikan Indonesia, Bandung
         </p>
+
+        <div className="gt-contact">
+          {/*
+            rel="noopener noreferrer" pada tautan target="_blank" bukan formalitas:
+            tanpa noopener, halaman tujuan memperoleh rujukan window.opener dan
+            dapat mengarahkan ulang tab asal ke alamat lain.
+          */}
+          <a href="https://www.linkedin.com/in/gardaasamuhammad"
+             target="_blank" rel="noopener noreferrer">
+            <span className="gt-contact-icon">in</span>
+            linkedin.com/in/gardaasamuhammad
+          </a>
+          <a href="mailto:gardaasamuhammad@gmail.com">
+            <span className="gt-contact-icon">@</span>
+            gardaasamuhammad@gmail.com
+          </a>
+        </div>
       </section>
 
       <section>
@@ -66,6 +86,38 @@ export function AboutPanel() {
           <li>{t('about.tech3')}</li>
           <li>{t('about.tech4')}</li>
         </ul>
+      </section>
+
+      <section>
+        <h3>{t('about.feedbackTitle')}</h3>
+        <p>{t('about.feedbackIntro')}</p>
+        {/*
+          rel="noopener noreferrer" bukan formalitas: tanpa noopener, halaman
+          tujuan memperoleh window.opener dan dapat mengarahkan ulang tab asal.
+        */}
+        <a className="gt-manual-link" href={BUG_REPORT_URL}
+           target="_blank" rel="noopener noreferrer">
+          <span className="gt-manual-icon is-report">!</span>
+          <span>
+            <strong>{t('about.feedbackLink')}</strong>
+            <br /><small>{t('about.feedbackMeta')}</small>
+          </span>
+        </a>
+        <p className="gt-hint">{t('about.feedbackHint')}</p>
+      </section>
+
+      <section>
+        <h3>{t('about.feedbackTitle')}</h3>
+        <p>{t('about.feedbackIntro')}</p>
+        <a className="gt-manual-link" href="https://forms.gle/FUqyoPKNu2C5kyx37"
+           target="_blank" rel="noopener noreferrer">
+          <span className="gt-manual-icon is-report">!</span>
+          <span>
+            <strong>{t('about.feedbackLink')}</strong>
+            <br /><small>{t('about.feedbackMeta')}</small>
+          </span>
+        </a>
+        <p className="gt-hint">{t('about.feedbackHint')}</p>
       </section>
 
       <p className="gt-about-foot">

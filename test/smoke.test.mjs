@@ -140,6 +140,42 @@ console.log('\n== aset yang ditautkan antarmuka ==');
     assert.equal(absolut.length, 0,
       `jalur absolut akan 404 di GitHub Pages:\n       ${absolut.join('\n       ')}`);
   });
+
+  /**
+   * Tautan yang membuka tab baru wajib memakai rel="noopener".
+   *
+   * Tanpanya, halaman tujuan memperoleh rujukan window.opener dan dapat
+   * mengarahkan ulang tab asal ke alamat lain — pengguna kembali ke tab REIS
+   * dan menemukan halaman yang sama sekali berbeda, tanpa pernah merasa
+   * berpindah. Ini kerentanan yang mudah lolos karena tidak menimbulkan galat
+   * apa pun.
+   */
+  const BLANK_RE = /<a\b[^>]*target=["']_blank["'][^>]*>/g;
+  const tanpaNoopener = [];
+  for (const f of walkSrc(new URL('../src/', import.meta.url))) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(BLANK_RE)) {
+      if (!/rel=["'][^"']*noopener/.test(m[0])) {
+        tanpaNoopener.push(`${f.pathname.split('/src/')[1]}: ${m[0].slice(0, 70)}…`);
+      }
+    }
+  }
+  t('tautan target="_blank" memakai rel="noopener"', () => {
+    assert.equal(tanpaNoopener.length, 0,
+      `tautan rawan:\n       ${tanpaNoopener.join('\n       ')}`);
+  });
+
+  /** Tautan luar harus HTTPS; http biasa akan diblokir sebagai konten campuran. */
+  const httpBiasa = [];
+  for (const f of walkSrc(new URL('../src/', import.meta.url))) {
+    const src = readFileSync(f, 'utf8');
+    for (const m of src.matchAll(/href=["'](http:\/\/[^"']+)["']/g)) {
+      httpBiasa.push(`${m[1]} di ${f.pathname.split('/src/')[1]}`);
+    }
+  }
+  t('tautan luar memakai HTTPS', () => {
+    assert.equal(httpBiasa.length, 0, httpBiasa.join('\n       '));
+  });
 }
 
 /* ------------------------------------------------- 1. analisis statis JSX */

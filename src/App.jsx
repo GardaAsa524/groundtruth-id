@@ -53,7 +53,7 @@ import { useSheetSync } from './hooks/useSheetSync.js';
 import { SYNC } from './core/sync/sheets.js';
 import { Compass } from './components/Compass.jsx';
 import {
-  RulerLayer, RulerPanel, TrackLayer, TrackPanel, useTrackRecorder,
+  RulerLayer, TrackLayer, MeasureToolbar, useTrackRecorder,
 } from './components/Measure.jsx';
 import { LayerPanel } from './components/LayerPanel.jsx';
 import { boundsOf } from './core/vector/reproject.js';
@@ -367,22 +367,6 @@ function Workspace() {
                 )}
 
                 <hr />
-                <h3 className="gt-section-h">{t('ruler.title')}</h3>
-                <RulerPanel
-                  active={rulerActive}
-                  onToggle={setRulerActive}
-                  points={rulerPoints}
-                  mode={rulerMode}
-                  onModeChange={setRulerMode}
-                  onUndo={() => setRulerPoints((p) => p.slice(0, -1))}
-                  onClear={() => setRulerPoints([])}
-                />
-
-                <hr />
-                <h3 className="gt-section-h">{t('track.title')}</h3>
-                <TrackPanel track={track} geo={geo} />
-
-                <hr />
                 <Compass />
 
                 <hr />
@@ -579,6 +563,20 @@ function Workspace() {
               onAddPoint={(p) => setRulerPoints((prev) => [...prev, p])}
             />
           </MapContainer>
+
+          <MeasureToolbar
+            geo={geo}
+            track={track}
+            ruler={{
+              active: rulerActive,
+              points: rulerPoints,
+              mode: rulerMode,
+              onToggle: setRulerActive,
+              onModeChange: setRulerMode,
+              onUndo: () => setRulerPoints((p) => p.slice(0, -1)),
+              onClear: () => setRulerPoints([]),
+            }}
+          />
 
           <CrosshairOverlay
             active={sampleMode === 'crosshair' && !draft && !rulerActive}
