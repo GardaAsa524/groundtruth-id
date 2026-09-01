@@ -1,0 +1,199 @@
+/* ---------------------------------------------------------------------------
+ * styles/layer-panel.css
+ * Gaya panel Lapisan. Semua warna diambil dari token di tokens.css
+ * (--bg, --panel, --line, --text, --muted, --accent, --ok) supaya mode terang
+ * dan gelap ikut berubah tanpa aturan tambahan.
+ *
+ * Diimpor dari components/LayerPanel.jsx.
+ * ------------------------------------------------------------------------- */
+
+.gt-lp { display: block; }
+
+/* --------------------------------------------------------------- kartu */
+
+.gt-lp-card {
+  border: 1px solid var(--line);
+  border-radius: 10px;
+  background: var(--bg);
+  padding: 8px 9px;
+  margin-bottom: 7px;
+}
+.gt-lp-card.is-open { border-color: var(--accent); }
+.gt-lp-card.is-hidden { opacity: .5; }
+
+.gt-lp-head { display: flex; align-items: center; gap: 8px; }
+
+.gt-lp-check { width: 20px; height: 20px; flex: none; accent-color: var(--accent); }
+
+.gt-lp-title {
+  flex: 1; min-width: 0;
+  display: flex; flex-direction: column; align-items: flex-start; gap: 2px;
+  border: 0; background: none; padding: 2px 0;
+  color: var(--text); text-align: left; cursor: pointer; font: inherit;
+}
+.gt-lp-name {
+  font-size: 13px; font-weight: 600; max-width: 100%;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.gt-lp-meta { display: flex; gap: 6px; font-size: 10px; color: var(--muted); }
+.gt-lp-kind { border: 1px solid var(--line); border-radius: 999px; padding: 0 6px; }
+
+/* Urutan lapisan. Tombol sengaja tinggi 22px dan lebar 30px: cukup besar untuk
+   jari bersarung tangan, cukup kecil untuk tidak mendorong nama lapisan. */
+.gt-lp-move { display: flex; flex-direction: column; gap: 2px; flex: none; }
+.gt-lp-move button {
+  border: 1px solid var(--line); background: var(--panel); color: var(--text);
+  border-radius: 6px; width: 30px; height: 22px;
+  font-size: 9px; line-height: 1; cursor: pointer;
+}
+.gt-lp-move button:disabled { opacity: .3; cursor: not-allowed; }
+
+.gt-lp-chev {
+  flex: none; border: 1px solid var(--line); background: var(--panel);
+  color: var(--muted); border-radius: 7px;
+  min-width: 30px; min-height: 34px; font-size: 11px; cursor: pointer;
+  transform: rotate(-90deg); transition: transform .15s ease;
+}
+.gt-lp-chev.is-open { transform: rotate(0deg); }
+
+/* ------------------------------------------------------------- isi kartu */
+
+.gt-lp-body { margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--line); }
+
+.gt-lp-tabs {
+  display: flex; border: 1px solid var(--line); border-radius: 8px;
+  overflow: hidden; margin-bottom: 10px;
+}
+.gt-lp-tabs button {
+  flex: 1; border: 0; background: var(--panel); color: var(--muted);
+  padding: 8px 4px; min-height: 40px;
+  font-size: 11.5px; font-weight: 600; cursor: pointer;
+}
+.gt-lp-tabs button.is-on { background: var(--accent); color: #fff; }
+
+.gt-lp-actions { display: flex; align-items: center; gap: 6px; margin-top: 10px; }
+.gt-lp-zoom {
+  flex: 1; min-height: 38px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--text);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+.gt-lp-opacity { flex: 1; font-size: 11px; color: var(--muted); }
+.gt-lp-opacity input { display: block; width: 100%; accent-color: var(--accent); }
+.gt-lp-note { margin: 8px 0 0; font-size: 10.5px; color: var(--ok); }
+
+/* --------------------------------------------------------------- legenda */
+
+.gt-lp-legend { display: flex; flex-direction: column; gap: 3px; }
+.gt-lp-legend-row {
+  display: flex; align-items: center; gap: 8px;
+  font-size: 12px; min-height: 30px; cursor: pointer;
+}
+.gt-lp-legend-row.is-off { color: var(--muted); }
+.gt-lp-legend-row input { width: 16px; height: 16px; flex: none; accent-color: var(--accent); }
+.gt-lp-swatch {
+  flex: none; width: 14px; height: 14px; border-radius: 4px;
+  border: 1px solid rgba(255, 255, 255, .18);
+}
+.gt-lp-legend-row.is-off .gt-lp-swatch { background: transparent; opacity: .4; }
+.gt-lp-legend-label { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gt-lp-legend-count { color: var(--muted); font-size: 10px; }
+
+/* ---------------------------------------------------------------- tabel */
+
+.gt-lp-table { width: 100%; border-collapse: collapse; font-size: 11px; }
+.gt-lp-table th {
+  text-align: left; padding: 5px 4px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted); font-weight: 600;
+}
+.gt-lp-table td { padding: 5px 4px; border-bottom: 1px solid var(--line); }
+.gt-lp-table tbody tr { cursor: pointer; }
+.gt-lp-table tbody tr:hover { background: var(--panel); }
+
+/* ------------------------------------------------------------- memuat */
+
+.gt-lp-card.is-loading { border-color: var(--accent); padding: 10px 11px; }
+
+.gt-lp-spinner {
+  width: 20px; height: 20px; flex: none; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: gt-lp-spin .9s linear infinite;
+}
+@keyframes gt-lp-spin { to { transform: rotate(360deg); } }
+
+.gt-lp-pct { font-size: 12px; font-weight: 700; color: var(--accent); }
+
+.gt-lp-bar {
+  height: 5px; border-radius: 3px; background: var(--line);
+  overflow: hidden; margin: 10px 0 9px;
+}
+.gt-lp-bar > div { height: 100%; background: var(--accent); transition: width .2s linear; }
+
+.gt-lp-cancel {
+  width: 100%; min-height: 38px;
+  border: 1px solid var(--line); border-radius: 8px;
+  background: var(--panel); color: var(--muted);
+  font-size: 12px; font-weight: 600; cursor: pointer;
+}
+
+.gt-lp-skel {
+  display: flex; align-items: center; gap: 10px;
+  border: 1px solid var(--line); border-radius: 10px;
+  background: var(--bg); padding: 12px 11px; margin-bottom: 7px;
+  animation: gt-lp-pulse 1.4s ease-in-out infinite;
+}
+.gt-lp-skel:nth-of-type(even) { animation-delay: .35s; }
+.gt-lp-skel-box {
+  width: 20px; height: 20px; flex: none; border-radius: 5px;
+  background: color-mix(in oklab, var(--line) 80%, var(--text));
+}
+.gt-lp-skel-lines { display: flex; flex-direction: column; gap: 6px; flex: 1; }
+.gt-lp-skel-lines span {
+  height: 9px; border-radius: 4px;
+  background: color-mix(in oklab, var(--line) 80%, var(--text));
+}
+@keyframes gt-lp-pulse { 0%, 100% { opacity: .35; } 50% { opacity: .7; } }
+
+/* ------------------------------------------------------------ kosong */
+
+.gt-lp-empty {
+  border: 1px solid var(--line); border-radius: 12px; background: var(--bg);
+  padding: 26px 20px;
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  text-align: center;
+}
+.gt-lp-empty svg { width: 44px; height: 44px; color: var(--line); }
+.gt-lp-empty-title { margin: 0; font-size: 13.5px; font-weight: 600; }
+.gt-lp-empty .gt-hint { margin: 0; }
+.gt-lp-empty .gt-btn-primary { width: 100%; min-height: 44px; }
+
+/* ------------------------------------------------------ layar sentuh */
+
+@media (pointer: coarse) {
+  .gt-lp-move button { height: 24px; }
+  .gt-lp-chev { min-height: 38px; }
+  .gt-lp-legend-row { min-height: 34px; }
+}
+
+/* -------------------------------------------------------------- tablet
+   Mulai 900px panel cukup lebar untuk dua kolom: legenda di kiri, tindakan
+   di kanan. Tanpa ini legenda enam kelas mendorong tombol keluar layar. */
+
+@media (min-width: 900px) {
+  .gt-lp-body {
+    display: grid;
+    grid-template-columns: 1fr 132px;
+    grid-template-areas: "tabs tabs" "section actions";
+    gap: 12px;
+  }
+  .gt-lp-tabs { grid-area: tabs; margin-bottom: 0; }
+  .gt-lp-tabs button { min-height: 34px; }
+  .gt-lp-section { grid-area: section; min-width: 0; }
+  .gt-lp-actions {
+    grid-area: actions;
+    flex-direction: column; align-items: stretch; margin-top: 0;
+  }
+  .gt-lp-note { grid-column: 1 / -1; }
+  .gt-lp-legend-row { min-height: 28px; }
+}
