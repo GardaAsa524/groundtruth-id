@@ -7,7 +7,7 @@
     "dev": "vite --host",
     "build": "vite build",
     "preview": "vite preview --host",
-    "test": "node test/core.test.mjs && node test/measure.test.mjs && node test/vector.test.mjs && node test/export.test.mjs && node test/sync.test.mjs && node test/smoke.test.mjs"
+    "test": "node test/core.test.mjs && node test/measure.test.mjs && node test/vector.test.mjs && node test/export.test.mjs && node test/sync.test.mjs && node test/panel.test.mjs && node test/smoke.test.mjs"
   },
   "dependencies": {
     "@geoman-io/leaflet-geoman-free": "^2.17.0",

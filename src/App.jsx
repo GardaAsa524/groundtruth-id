@@ -102,7 +102,7 @@ function Workspace() {
   // pada ponsel, dashboard yang selalu terbuka menyisakan peta terlalu sempit.
   const [panelOpen, setPanelOpen] = useState(true);
   const [testing, setTesting] = useState(false);
-  const panel = usePanelSize();
+  const panel = usePanelSize({ open: panelOpen, onToggle: setPanelOpen });
 
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerMode, setRulerMode] = useState('distance');
@@ -384,15 +384,23 @@ function Workspace() {
       <div className="gt-body">
         <aside className={`gt-sidebar${panelOpen ? '' : ' is-collapsed'}`
           + (panel.dragging ? ' is-dragging' : '')}>
-          {/* Pegangan seret. Ditempatkan di dalam aside agar posisinya
-              mengikuti tepi panel pada kedua orientasi. */}
+          {/* Layar lebar: pegangan tipis di tepi kanan, mengatur lebar. */}
           <div className="gt-resizer" title={t('ui.resize')}
-            aria-label={t('ui.resize')} {...panel.handleProps} />
+            aria-label={t('ui.resize')} {...panel.edgeProps} />
+
+          {/*
+            Ponsel: tombol ini SEKALIGUS pegangan. Ketuk untuk membuka atau
+            menutup, seret ke atas dan bawah untuk mengatur tinggi. Menyatukan
+            keduanya menghindari dua kendali berdesakan di tepi yang sama, dan
+            memberi target sentuh selebar layar alih-alih strip 14 piksel.
+          */}
           <button type="button" className="gt-panel-toggle"
-            aria-expanded={panelOpen}
-            onClick={() => setPanelOpen((v) => !v)}>
+            title={t('ui.gripHint')} {...panel.gripProps}>
             <span className="gt-panel-grip" />
-            {panelOpen ? t('ui.hidePanel') : t('ui.showPanel')}
+            <span className="gt-panel-toggle-label">
+              {panelOpen ? t('ui.hidePanel') : t('ui.showPanel')}
+            </span>
+            <span className="gt-panel-hint">{t('ui.dragHint')}</span>
           </button>
           <nav className="gt-tabs">
             {TABS.map((k) => (

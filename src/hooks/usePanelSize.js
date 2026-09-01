@@ -3,36 +3,41 @@
  * ---------------------------------------------------------------------------
  * Ukuran panel samping yang dapat diseret pengguna.
  *
- * DUA SUMBU, SATU HOOK
- * --------------------
- * Pada layar lebar panel berada di kiri dan yang diatur adalah LEBARNYA; pada
- * ponsel panel berada di bawah dan yang diatur adalah TINGGINYA. Keduanya
- * ditangani satu hook karena logika seretnya identik — hanya sumbu dan arahnya
- * yang berbeda.
+ * DUA SUMBU, DUA PEGANGAN, SATU HOOK
+ * ----------------------------------
+ * Pada layar lebar panel berada di kiri dan yang diatur adalah LEBARNYA lewat
+ * pegangan tipis di tepi kanan — pola baku yang sudah dikenal orang dari
+ * aplikasi desktop.
  *
- * TIGA HAL YANG MEMBUAT SERET TERASA BENAR
- * ----------------------------------------
- * 1. Pointer Events, bukan mouse dan touch terpisah. Satu jalur kode untuk
- *    tetikus, sentuh, dan pena — dan setPointerCapture membuat seretan tetap
- *    terkunci walau kursor keluar dari pegangan.
- * 2. Ukuran ditulis ke variabel CSS, bukan ke gaya sebaris tiap elemen.
- *    Tata letak menyesuaikan sendiri lewat CSS, sehingga React tidak perlu
- *    dirender ulang pada setiap gerakan jari — dan seretnya tetap mulus.
- * 3. Batas minimum dan maksimum ditegakkan. Tanpa itu, panel dapat diseret
- *    sampai nol dan pegangannya ikut hilang, sehingga tidak ada cara
- *    mengembalikannya tanpa memuat ulang halaman.
+ * Pada ponsel panel berada di bawah dan yang diatur adalah TINGGINYA. Di sana
+ * pegangan tipis tidak dapat dipakai: jari menutupi target setebal 14 piksel,
+ * dan meletakkannya berdampingan dengan tombol "Sembunyikan panel" membuat dua
+ * kendali berdesakan di tempat yang sama. Karena itu di ponsel **tombolnya
+ * sendiri yang menjadi pegangan**: ketuk untuk menutup, seret untuk mengatur
+ * tinggi.
+ *
+ * MEMBEDAKAN KETUKAN DARI SERETAN
+ * -------------------------------
+ * Satu elemen yang menangani keduanya harus memutuskan mana yang dimaksud.
+ * Ambangnya jarak, bukan waktu: seretan pelan sejauh 40 piksel jelas seretan
+ * walau lambat, sedangkan ketukan yang bergeser 2 piksel karena jari bergetar
+ * tetap ketukan. Ambang 8 piksel kira-kira setara ketidakstabilan jari pada
+ * layar sentuh.
  */
 
 import { useState, useEffect, useCallback, useRef } from 'react';
 
 const KEY = 'reis.panelSize';
 
-/** Ambang lebar yang sama dengan titik henti di tokens.css. */
+/** Sama dengan titik henti di tokens.css. */
 const MOBILE_MAX = 820;
+
+/** Jarak minimum sebelum gerakan dianggap seretan, bukan ketukan. */
+const DRAG_THRESHOLD = 8;
 
 const clamp = (v, lo, hi) => Math.min(hi, Math.max(lo, v));
 
-export function usePanelSize() {
+export function usePanelSize({ open = true, onToggle } = {}) {
   const [vertical, setVertical] = useState(
     () => (typeof window !== 'undefined' ? window.innerWidth <= MOBILE_MAX : false));
   const [size, setSize] = useState(() => {
@@ -45,15 +50,17 @@ export function usePanelSize() {
   });
   const [dragging, setDragging] = useState(false);
   const startRef = useRef(null);
+  const movedRef = useRef(false);
 
-  // Pantau perubahan orientasi dan ukuran jendela.
   useEffect(() => {
     const onResize = () => setVertical(window.innerWidth <= MOBILE_MAX);
     window.addEventListener('resize', onResize);
     return () => window.removeEventListener('resize', onResize);
   }, []);
 
-  // Tulis ke variabel CSS; tata letak menyesuaikan sendiri tanpa render ulang.
+  // Ukuran ditulis ke variabel CSS, bukan gaya sebaris tiap elemen: tata letak
+  // menyesuaikan sendiri lewat CSS sehingga React tidak dirender ulang pada
+  // setiap gerakan jari, dan seretnya tetap mulus.
   useEffect(() => {
     const el = document.documentElement;
     el.style.setProperty('--gt-panel-w', `${size.w}px`);
@@ -61,76 +68,111 @@ export function usePanelSize() {
     try { localStorage.setItem(KEY, JSON.stringify(size)); } catch { /* mode privat */ }
   }, [size]);
 
-  const onPointerDown = useCallback((e) => {
-    // Hanya tombol utama; klik kanan tidak boleh memulai seretan.
+  const maxWidth = () =>
+    Math.min(720, (typeof window !== 'undefined' ? window.innerWidth : 1024) - 280);
+
+  const reset = useCallback(() => setSize({ w: 380, h: 45 }), []);
+
+  /* ------------------------------------------------ inti seret, dua sumbu */
+
+  const begin = useCallback((e) => {
     if (e.button !== undefined && e.button !== 0) return;
     e.currentTarget.setPointerCapture?.(e.pointerId);
     startRef.current = {
       x: e.clientX, y: e.clientY,
       w: size.w, h: size.h,
-      vh: window.innerHeight,
+      vh: typeof window !== 'undefined' ? window.innerHeight : 800,
+      wasOpen: open,
     };
-    setDragging(true);
-  }, [size]);
+    movedRef.current = false;
+  }, [size, open]);
 
-  const onPointerMove = useCallback((e) => {
+  const move = useCallback((e, axis) => {
     const st = startRef.current;
     if (!st) return;
-    e.preventDefault();
 
-    if (vertical) {
-      // Panel di bawah: menyeret ke ATAS memperbesar, jadi selisihnya dibalik.
-      const delta = ((st.y - e.clientY) / st.vh) * 100;
-      setSize((s) => ({ ...s, h: clamp(st.h + delta, 18, 88) }));
-    } else {
-      const lebarMaks = Math.min(720, window.innerWidth - 280);
-      setSize((s) => ({ ...s, w: clamp(st.w + (e.clientX - st.x), 260, lebarMaks) }));
+    const dx = e.clientX - st.x;
+    const dy = e.clientY - st.y;
+    const jarak = Math.hypot(dx, dy);
+
+    if (!movedRef.current) {
+      if (jarak < DRAG_THRESHOLD) return;   // masih mungkin ketukan
+      movedRef.current = true;
+      setDragging(true);
+      // Menyeret panel yang sedang tertutup membukanya lebih dahulu; kalau
+      // tidak, pengguna menyeret sesuatu yang tidak terlihat berubah.
+      if (!st.wasOpen) onToggle?.(true);
     }
-  }, [vertical]);
 
-  const onPointerUp = useCallback((e) => {
+    e.preventDefault();
+    if (axis === 'y') {
+      // Menyeret ke ATAS memperbesar panel, jadi selisihnya dibalik.
+      setSize((s) => ({ ...s, h: clamp(st.h + ((st.y - e.clientY) / st.vh) * 100, 18, 88) }));
+    } else {
+      setSize((s) => ({ ...s, w: clamp(st.w + dx, 260, maxWidth()) }));
+    }
+  }, [onToggle]);
+
+  const end = useCallback((e) => {
     e.currentTarget.releasePointerCapture?.(e.pointerId);
+    const adalahKetukan = startRef.current && !movedRef.current;
     startRef.current = null;
     setDragging(false);
+    return adalahKetukan;
   }, []);
 
-  /** Kembalikan ke ukuran bawaan; dipanggil dari ketukan ganda pada pegangan. */
-  const reset = useCallback(() => setSize({ w: 380, h: 45 }), []);
+  /* --------------------------------------------- papan ketik untuk keduanya */
 
-  /**
-   * Papan ketik: panah mengubah ukuran, Home mengembalikan.
-   * Pegangan seret tanpa dukungan papan ketik tidak dapat dipakai sama sekali
-   * oleh pengguna yang tidak memakai tetikus.
-   */
-  const onKeyDown = useCallback((e) => {
-    const step = e.shiftKey ? 40 : 12;
-    const stepPct = e.shiftKey ? 8 : 3;
-    if (vertical) {
-      if (e.key === 'ArrowUp') setSize((s) => ({ ...s, h: clamp(s.h + stepPct, 18, 88) }));
-      else if (e.key === 'ArrowDown') setSize((s) => ({ ...s, h: clamp(s.h - stepPct, 18, 88) }));
+  const keyHandler = useCallback((axis) => (e) => {
+    if (axis === 'y') {
+      const step = e.shiftKey ? 8 : 3;
+      if (e.key === 'ArrowUp') setSize((s) => ({ ...s, h: clamp(s.h + step, 18, 88) }));
+      else if (e.key === 'ArrowDown') setSize((s) => ({ ...s, h: clamp(s.h - step, 18, 88) }));
       else if (e.key === 'Home') reset();
+      else if (e.key === 'Enter' || e.key === ' ') { onToggle?.(!open); e.preventDefault(); return; }
       else return;
     } else {
-      const maks = Math.min(720, window.innerWidth - 280);
-      if (e.key === 'ArrowRight') setSize((s) => ({ ...s, w: clamp(s.w + step, 260, maks) }));
-      else if (e.key === 'ArrowLeft') setSize((s) => ({ ...s, w: clamp(s.w - step, 260, maks) }));
+      const step = e.shiftKey ? 40 : 12;
+      if (e.key === 'ArrowRight') setSize((s) => ({ ...s, w: clamp(s.w + step, 260, maxWidth()) }));
+      else if (e.key === 'ArrowLeft') setSize((s) => ({ ...s, w: clamp(s.w - step, 260, maxWidth()) }));
       else if (e.key === 'Home') reset();
       else return;
     }
     e.preventDefault();
-  }, [vertical, reset]);
+  }, [reset, onToggle, open]);
 
   return {
     size, vertical, dragging, reset,
-    handleProps: {
-      onPointerDown, onPointerMove, onPointerUp,
-      onPointerCancel: onPointerUp,
+
+    /** Pegangan tipis di tepi kanan panel. Hanya dipakai pada layar lebar. */
+    edgeProps: {
+      onPointerDown: begin,
+      onPointerMove: (e) => move(e, 'x'),
+      onPointerUp: end,
+      onPointerCancel: end,
       onDoubleClick: reset,
-      onKeyDown,
+      onKeyDown: keyHandler('x'),
       role: 'separator',
       tabIndex: 0,
-      'aria-orientation': vertical ? 'horizontal' : 'vertical',
-      'aria-valuenow': vertical ? Math.round(size.h) : size.w,
+      'aria-orientation': 'vertical',
+      'aria-valuenow': Math.round(size.w),
+    },
+
+    /**
+     * Tombol "Sembunyikan panel" pada ponsel, yang sekaligus menjadi pegangan.
+     * Ketukan diteruskan ke onToggle; seretan mengatur tinggi.
+     */
+    gripProps: {
+      onPointerDown: begin,
+      onPointerMove: (e) => move(e, 'y'),
+      onPointerUp: (e) => { if (end(e)) onToggle?.(!open); },
+      onPointerCancel: end,
+      onKeyDown: keyHandler('y'),
+      // Tanpa ini, peramban menggulirkan halaman alih-alih menyerahkan
+      // gerakan vertikal ke penangan kita.
+      style: { touchAction: 'none' },
+      'aria-expanded': open,
+      'aria-valuenow': Math.round(size.h),
     },
   };
 }
