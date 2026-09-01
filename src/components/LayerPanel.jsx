@@ -43,6 +43,7 @@ const SECTIONS = [
   ['sym', 'layers.symbology', 'Simbologi'],
   ['filter', 'layers.filter', 'Penyaring'],
   ['table', 'layers.table', 'Tabel'],
+  ['area', 'layers.area', 'Luas'],
 ];
 
 /* ========================================================================= */

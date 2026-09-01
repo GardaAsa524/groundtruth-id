@@ -25,6 +25,7 @@ import {
 import {
   detectVectorCRS, reprojectToWGS84, boundsOf, epsgFromPRJ, utmZoneCandidates,
 } from '../core/vector/reproject.js';
+import { parseKML } from '../core/vector/kml.js';
 import {
   uniqueValues, buildColorMap, styleFor, legendEntries, PALETTE,
 } from '../core/vector/style.js';
@@ -69,23 +70,30 @@ export function useVectorFile() {
       // sering hanya membawa .shp tanpa .dbf, sehingga tabel atributnya hilang
       // dan seluruh modul kueri menjadi tidak berguna. GeoJSON satu berkas dan
       // selalu membawa atributnya.
-      const geojson = list.find((f) => /\.(geojson|json)$/i.test(f.name));
-      if (!geojson) {
+      const berkas = list[0];
+      if (!berkas) throw new Error('Tidak ada berkas dipilih.');
+      const name = berkas.name;
+      const teks = await berkas.text();
+      let fc;
+
+      if (/\.kml$/i.test(name)) {
+        // KML selalu lintang-bujur WGS 84 menurut spesifikasinya, jadi tidak
+        // ada langkah deteksi CRS untuk jalur ini.
+        const hasil = parseKML(teks);
+        fc = hasil.fc;
+        if (hasil.skipped > 0) {
+          console.warn(`${hasil.skipped} Placemark tanpa geometri dilewati.`);
+        }
+      } else if (/\.(geojson|json)$/i.test(name)) {
+        fc = JSON.parse(teks);
+      } else {
         throw new Error(
-          'Hanya berkas GeoJSON yang didukung. Bila data Anda berupa Shapefile, ' +
-          'ekspor dahulu ke GeoJSON dari QGIS atau ArcGIS ' +
+          'Format tidak didukung. Gunakan GeoJSON atau KML. Bila data Anda ' +
+          'berupa Shapefile, ekspor dahulu ke GeoJSON dari QGIS atau ArcGIS ' +
           '(klik kanan lapisan → Export → Save Features As → GeoJSON).'
         );
       }
-      const fcText = await geojson.text();
-      let fc = JSON.parse(fcText);
-      const name = geojson.name;
       const prjEPSG = null;
-
-      if (Array.isArray(fc)) {
-        fc = { type: 'FeatureCollection', features: fc.flatMap((c) => c.features) };
-      }
-      if (!fc?.features?.length) throw new Error('Tidak ada fitur di dalam berkas.');
 
       rawRef.current = fc;
       const detected = detectVectorCRS(fc);

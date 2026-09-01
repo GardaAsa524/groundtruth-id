@@ -145,6 +145,19 @@ export function pathLength(pts) {
  * @returns {number} meter persegi
  */
 export function polygonArea(pts) {
+  return Math.abs(polygonAreaSigned(pts));
+}
+
+/**
+ * Luas bertanda. Positif bila cincin berputar berlawanan arah jarum jam.
+ *
+ * Tanda diperlukan untuk poligon berlubang: cincin luar dan cincin dalam
+ * berputar berlawanan arah menurut RFC 7946, sehingga menjumlahkan luas
+ * bertanda otomatis mengurangi lubangnya. Memakai nilai mutlak lalu
+ * mengurangi secara manual bekerja juga, tetapi gagal pada berkas yang arah
+ * putarannya tidak mengikuti spesifikasi — dan itu banyak.
+ */
+export function polygonAreaSigned(pts) {
   const n = pts?.length ?? 0;
   if (n < 3) return 0;
 
@@ -157,7 +170,7 @@ export function polygonArea(pts) {
     const j = (i + 1) % n;
     total += rad(pts[j].lon - pts[i].lon) * (2 + beta[i] + beta[j]);
   }
-  return Math.abs((total * R_AUTHALIC * R_AUTHALIC) / 2);
+  return (total * R_AUTHALIC * R_AUTHALIC) / 2;
 }
 
 /** Azimut awal dari titik 1 ke titik 2, derajat searah jarum jam dari utara. */

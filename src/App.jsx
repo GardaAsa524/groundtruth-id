@@ -34,12 +34,13 @@
  * ProjectContext. Modul tidak saling mengimpor; mereka bertemu di sini.
  */
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { MapContainer, ScaleControl } from 'react-leaflet';
 import 'leaflet/dist/leaflet.css';
 
 import { AppProviders, useTheme, useLocale, useProject } from './context/AppProviders.jsx';
 import { useGeolocation } from './hooks/useGeolocation.js';
+import { usePanelSize } from './hooks/usePanelSize.js';
 import { ActiveBasemap, BasemapGallery, InvalidateOnResize } from './components/BasemapGallery.jsx';
 import { GPSAccuracyLayer, GPSReadout } from './components/GPSAccuracyLayer.jsx';
 import { useGeoPDF, GeoPDFLayer, GeoPDFQualityPanel } from './components/GeoPDFLayer.jsx';
@@ -60,8 +61,11 @@ import { Compass } from './components/Compass.jsx';
 import {
   RulerLayer, TrackLayer, MeasureToolbar, useTrackRecorder,
 } from './components/Measure.jsx';
-import { LayerPanel } from './components/LayerPanel.jsx';
+import { LayerPanel, LegendList, MiniAttributeTable } from './components/LayerPanel.jsx';
+import { legendEntries } from './core/vector/style.js';
+import { AreaByClassChart } from './components/AreaChart.jsx';
 import { boundsOf } from './core/vector/reproject.js';
+import './styles/layer-panel.css';
 import { DrawingTools, DrawingPanel, ExportButton } from './components/DrawingTools.jsx';
 import {
   MapBridge, CenterTracker, CrosshairOverlay, SamplingBar, SampleSheet,
@@ -71,7 +75,7 @@ import {
   buildMatrix, computeMetrics, computeBinaryValidation, matrixToCSV,
 } from './core/accuracy/confusionMatrix.js';
 
-const TABS = ['map', 'layers', 'query', 'accuracy', 'export', 'settings', 'about'];
+const TABS = ['map', 'layers', 'accuracy', 'export', 'settings', 'about'];
 
 function Workspace() {
   const { t, nf, toggle: toggleLocale } = useLocale();
@@ -98,11 +102,15 @@ function Workspace() {
   // pada ponsel, dashboard yang selalu terbuka menyisakan peta terlalu sempit.
   const [panelOpen, setPanelOpen] = useState(true);
   const [testing, setTesting] = useState(false);
+  const panel = usePanelSize();
 
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerMode, setRulerMode] = useState('distance');
   const [rulerPoints, setRulerPoints] = useState([]);
   const [heatMode, setHeatMode] = useState('off');
+  const [layerOrder, setLayerOrder] = useState([]);   // id, depan ke belakang
+  const [classOff, setClassOff] = useState({});       // { layerId: { kelas: true } }
+  const fileInput = useRef(null);
   const [center, setCenter] = useState(null);
   const [draft, setDraft] = useState(null);      // titik menunggu diisi kelasnya
 
@@ -261,13 +269,63 @@ function Workspace() {
         ...st('drawing'),
       });
     }
+    // Kartu progres untuk berkas yang sedang dibaca. Tanpa ini, memuat berkas
+    // besar tampak seperti tidak terjadi apa-apa selama beberapa detik.
+    if (pdf.status === 'parsing' || pdf.status === 'rendering') {
+      out.unshift({ id: 'geopdf-loading', kind: 'geopdf', status: 'loading',
+        name: 'GeoPDF', progress: pdf.progress });
+    }
+    if (vector.status === 'loading') {
+      out.unshift({ id: 'vector-loading', kind: 'vector', status: 'loading',
+        name: vector.name ?? 'Vektor' });
+    }
+
+    if (layerOrder.length) {
+      out.sort((a, b) => {
+        const ia = layerOrder.indexOf(a.id);
+        const ib = layerOrder.indexOf(b.id);
+        return (ia < 0 ? -1 : ia) - (ib < 0 ? -1 : ib);
+      });
+    }
     return out;
-  }, [pdf.doc, vector.fc, vector.bounds, vector.crs, vector.name,
-      samples, drawnFeatures, track.points, layerState, t]);
+  }, [pdf.doc, pdf.status, pdf.progress, vector.fc, vector.bounds, vector.crs,
+      vector.name, vector.status, samples, drawnFeatures, track.points,
+      layerState, layerOrder, t]);
+
+  // Lapisan baru masuk di depan; urutan yang sudah diatur pengguna dipertahankan.
+  const layerIds = layers.map((l) => l.id).join('|');
+  useEffect(() => {
+    setLayerOrder((prev) => {
+      const ids = layerIds ? layerIds.split('|') : [];
+      const kept = prev.filter((id) => ids.includes(id));
+      const baru = ids.filter((id) => !kept.includes(id));
+      return [...baru, ...kept];
+    });
+  }, [layerIds]);
 
   const vis = useCallback((id) => layerState[id]?.visible !== false, [layerState]);
   const opac = useCallback(
     (id, def = 1) => layerState[id]?.opacity ?? def, [layerState]);
+
+  /** Naik-turunkan lapisan. Urutan yang dipilih pengguna selalu menang. */
+  const reorder = useCallback((id, delta) => {
+    setLayerOrder((prev) => {
+      if (!prev.length) return prev;
+      const next = [...prev];
+      const i = next.indexOf(id);
+      const j = i + delta;
+      if (i < 0 || j < 0 || j >= next.length) return prev;
+      next.splice(j, 0, next.splice(i, 1)[0]);
+      return next;
+    });
+  }, []);
+
+  const toggleClass = useCallback((layerId, value) => {
+    setClassOff((prev) => {
+      const cur = prev[layerId] ?? {};
+      return { ...prev, [layerId]: { ...cur, [value]: !cur[value] } };
+    });
+  }, []);
 
   const updateLayer = useCallback((id, patch) => {
     setLayerState((prev) => ({ ...prev, [id]: { ...(prev[id] ?? {}), ...patch } }));
@@ -324,7 +382,12 @@ function Workspace() {
       </header>
 
       <div className="gt-body">
-        <aside className={`gt-sidebar${panelOpen ? '' : ' is-collapsed'}`}>
+        <aside className={`gt-sidebar${panelOpen ? '' : ' is-collapsed'}`
+          + (panel.dragging ? ' is-dragging' : '')}>
+          {/* Pegangan seret. Ditempatkan di dalam aside agar posisinya
+              mengikuti tepi panel pada kedua orientasi. */}
+          <div className="gt-resizer" title={t('ui.resize')}
+            aria-label={t('ui.resize')} {...panel.handleProps} />
           <button type="button" className="gt-panel-toggle"
             aria-expanded={panelOpen}
             onClick={() => setPanelOpen((v) => !v)}>
@@ -406,7 +469,17 @@ function Workspace() {
                     <strong>GeoJSON</strong>
                     <small>{t('layers.addVectorHint')}</small>
                   </span>
-                  <input type="file" accept=".geojson,.json"
+                  <input type="file" accept=".geojson,.json" ref={fileInput}
+                    onChange={(e) => e.target.files.length && vector.load(e.target.files)} />
+                </label>
+
+                <label className="gt-addlayer">
+                  <span className="gt-addlayer-icon is-kml">KML</span>
+                  <span className="gt-addlayer-text">
+                    <strong>KML</strong>
+                    <small>{t('layers.addKmlHint')}</small>
+                  </span>
+                  <input type="file" accept=".kml"
                     onChange={(e) => e.target.files.length && vector.load(e.target.files)} />
                 </label>
                 {vector.status === 'loading' && <p className="gt-hint">{t('layers.parsing')}</p>}
@@ -422,35 +495,63 @@ function Workspace() {
                   onChange={updateLayer}
                   onZoom={zoomTo}
                   onRemove={removeLayer}
+                  onReorder={reorder}
+                  onCancel={(id) => (id.startsWith('vector') ? vector.clear() : undefined)}
+                  onPickFile={() => fileInput.current?.click()}
+                  renderSection={(l, section) => {
+                    if (l.kind === 'geopdf') {
+                      return pdf.doc ? <GeoPDFQualityPanel doc={pdf.doc} t={t} nf={nf} /> : null;
+                    }
+                    if (l.kind !== 'vector' || !vector.fc) return null;
+
+                    if (section === 'sym') {
+                      return (
+                        <>
+                          <SymbologyPanel fc={vector.fc} schema={vector.schema}
+                            value={symbology} onChange={setSymbology} />
+                          {symbology.field && (
+                            <LegendList
+                              entries={legendEntries(vector.fc, symbology.field, symbology.colors)}
+                              off={classOff[l.id]}
+                              onToggle={(v) => toggleClass(l.id, v)}
+                              nf={nf}
+                            />
+                          )}
+                        </>
+                      );
+                    }
+                    if (section === 'filter') {
+                      return (
+                        <>
+                          <AttributeQueryBuilder fc={vector.fc} schema={vector.schema}
+                            onResult={setQueryResult} />
+                          <div className="gt-row">
+                            <span className="gt-hint">{t('vector.rest')}</span>
+                            <div className="gt-seg gt-seg-sm">
+                              {['dim', 'hide'].map((m) => (
+                                <button key={m} type="button"
+                                  className={filterMode === m ? 'is-on' : ''}
+                                  onClick={() => setFilterMode(m)}>
+                                  {m === 'dim' ? t('vector.dim') : t('vector.hide')}
+                                </button>
+                              ))}
+                            </div>
+                          </div>
+                        </>
+                      );
+                    }
+                    if (section === 'area') {
+                      return (
+                        <AreaByClassChart fc={vector.fc} field={symbology.field}
+                          colors={symbology.colors} mask={queryResult?.mask} />
+                      );
+                    }
+                    return (
+                      <MiniAttributeTable fc={vector.fc} nf={nf}
+                        onRowClick={(f) => zoomTo(boundsOf({ features: [f] }))} />
+                    );
+                  }}
                 />
-              </>
-            )}
-
-            {tab === 'query' && (
-              <>
-                {!vector.fc && <p className="gt-hint">{t('query.loadFirst')}</p>}
-
-                {vector.fc && (
-                  <>
-                    <div className="gt-row">
-                      <button type="button" onClick={() => zoomTo(vector.bounds)}>
-                        {t('layers.zoomTo')}
-                      </button>
-                      <div className="gt-seg">
-                        {['dim', 'hide'].map((m) => (
-                          <button key={m} type="button" className={filterMode === m ? 'is-on' : ''}
-                            onClick={() => setFilterMode(m)}>
-                            {m === 'dim' ? t('vector.dim') : t('vector.hide')}
-                          </button>
-                        ))}
-                      </div>
-                    </div>
-                    <SymbologyPanel fc={vector.fc} schema={vector.schema}
-                      value={symbology} onChange={setSymbology} />
-                  </>
-                )}
-
-                <AttributeQueryBuilder fc={vector.fc} schema={vector.schema} onResult={setQueryResult} />
               </>
             )}
 
@@ -571,7 +672,7 @@ function Workspace() {
                 fc={vector.fc}
                 mask={queryResult?.mask}
                 mode={filterMode}
-                symbology={symbology}
+                symbology={{ ...symbology, classOff: classOff.vector }}
               />
             )}
 

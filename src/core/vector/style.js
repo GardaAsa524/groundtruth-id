@@ -65,6 +65,11 @@ export function buildColorMap(values, existing = {}) {
  */
 export function styleFor(props, cfg) {
   const { field, colors, fillOpacity = 0.45, weight = 1.5, dimmed = false } = cfg ?? {};
+
+  // Kelas yang dimatikan dari legenda tidak digambar sama sekali.
+  if (isClassHidden(props, cfg)) {
+    return { stroke: false, fill: false, interactive: false };
+  }
   if (dimmed) {
     return {
       color: OTHER_COLOR, weight: 1, opacity: 0.25,
@@ -92,4 +97,19 @@ export function legendEntries(fc, field, colors) {
     color: colors?.[value] ?? OTHER_COLOR,
     count,
   }));
+}
+
+/**
+ * Kelas yang dimatikan dari legenda.
+ *
+ * Fitur TIDAK dihapus dari data, hanya tidak digambar. Mematikan lalu
+ * menyalakannya kembali harus terasa gratis — bila datanya benar-benar
+ * dibuang, menyalakannya kembali berarti memuat ulang berkas.
+ */
+export function isClassHidden(props, cfg) {
+  const { field, classOff } = cfg ?? {};
+  if (!field || !classOff) return false;
+  const raw = props?.[field];
+  const key = raw === null || raw === undefined || raw === '' ? '' : String(raw);
+  return classOff[key] === true;
 }
