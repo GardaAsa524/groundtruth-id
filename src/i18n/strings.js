@@ -90,6 +90,7 @@ export const STRINGS = {
     'sync.setupHint': 'Buka Apps Script pada spreadsheet tujuan, tempel kode dari berkas Apps_Script_REIS.gs, lalu Deploy sebagai Web app dengan akses "Anyone". Salin URL /exec ke sini.',
 
     'ui.resize': 'Seret untuk mengubah lebar panel. Ketuk dua kali untuk mengembalikan.',
+    'ui.sections': 'Bagian aplikasi',
     'ui.gripHint': 'Ketuk untuk membuka atau menutup, seret untuk mengatur tinggi.',
     'ui.dragHint': 'seret untuk atur tinggi',
     'ui.hidePanel': 'Sembunyikan panel', 'ui.showPanel': 'Tampilkan panel',
@@ -313,6 +314,7 @@ export const STRINGS = {
     'sync.setupHint': 'Open Apps Script on the target spreadsheet, paste the code from Apps_Script_REIS.gs, then Deploy as a Web app with access set to "Anyone". Copy the /exec URL here.',
 
     'ui.resize': 'Drag to change the panel width. Double-click to reset.',
+    'ui.sections': 'Application sections',
     'ui.gripHint': 'Tap to open or close, drag to set the height.',
     'ui.dragHint': 'drag to resize',
     'ui.hidePanel': 'Hide panel', 'ui.showPanel': 'Show panel',

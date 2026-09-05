@@ -64,6 +64,7 @@ import {
 import { LayerPanel, LegendList, MiniAttributeTable } from './components/LayerPanel.jsx';
 import { legendEntries } from './core/vector/style.js';
 import { AreaByClassChart } from './components/AreaChart.jsx';
+import { TabBar } from './components/TabBar.jsx';
 import { boundsOf } from './core/vector/reproject.js';
 import './styles/layer-panel.css';
 import { DrawingTools, DrawingPanel, ExportButton } from './components/DrawingTools.jsx';
@@ -100,9 +101,27 @@ function Workspace() {
   const [symbology, setSymbology] = useState({ field: '', colors: {} });
   // Panel samping dapat disembunyikan supaya peta memakai seluruh layar —
   // pada ponsel, dashboard yang selalu terbuka menyisakan peta terlalu sempit.
-  const [panelOpen, setPanelOpen] = useState(true);
+  // Pada ponsel panel bawaan tertutup — peta yang penuh adalah keadaan awal
+  // yang paling berguna di lapangan. Di layar lebar panel selalu terbuka.
+  const [panelOpen, setPanelOpen] = useState(
+    () => (typeof window === 'undefined' ? true : window.innerWidth > 820));
   const [testing, setTesting] = useState(false);
   const panel = usePanelSize({ open: panelOpen, onToggle: setPanelOpen });
+
+  /**
+   * Menyentuh tab membuka panel pada bagian itu. Menyentuh tab yang SEDANG
+   * aktif menutupnya kembali — perilaku yang sama dengan bilah tab peta di
+   * aplikasi survei lain, dan satu-satunya cara menutup panel tanpa mencari
+   * kendali terpisah.
+   */
+  const pickTab = useCallback((key) => {
+    setPanelOpen((wasOpen) => {
+      if (key === tab && wasOpen) return false;
+      return true;
+    });
+    setTab(key);
+  }, [tab]);
+
 
   const [rulerActive, setRulerActive] = useState(false);
   const [rulerMode, setRulerMode] = useState('distance');
@@ -303,6 +322,14 @@ function Workspace() {
     });
   }, [layerIds]);
 
+  /** Angka kecil pada tab; hanya yang benar-benar berubah selama bekerja. */
+  const tabBadges = useMemo(() => ({
+    layers: layers.filter((l) => l.status !== 'loading').length,
+    accuracy: samples.length,
+    export: samples.length + (drawnFeatures?.features?.length ?? 0),
+    settings: sync.pending,
+  }), [layers, samples.length, drawnFeatures, sync.pending]);
+
   const vis = useCallback((id) => layerState[id]?.visible !== false, [layerState]);
   const opac = useCallback(
     (id, def = 1) => layerState[id]?.opacity ?? def, [layerState]);
@@ -402,13 +429,14 @@ function Workspace() {
             </span>
             <span className="gt-panel-hint">{t('ui.dragHint')}</span>
           </button>
-          <nav className="gt-tabs">
-            {TABS.map((k) => (
-              <button key={k} type="button"
-                className={tab === k ? 'is-on' : ''}
-                onClick={() => setTab(k)}>{t(`nav.${k}`)}</button>
-            ))}
-          </nav>
+          <TabBar
+            tabs={TABS.map((k) => ({
+              key: k, label: t(`nav.${k}`), badge: tabBadges[k] ?? 0,
+            }))}
+            active={tab}
+            open={panelOpen}
+            onSelect={pickTab}
+          />
 
           <div className="gt-panel">
             {tab === 'map' && (

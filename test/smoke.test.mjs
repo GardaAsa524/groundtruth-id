@@ -272,6 +272,9 @@ globalThis.cancelAnimationFrame = window.cancelAnimationFrame ?? clearTimeout;
 globalThis.matchMedia = window.matchMedia = () => ({
   matches: false, addEventListener() {}, removeEventListener() {}, addListener() {}, removeListener() {},
 });
+// jsdom tidak menyediakan scrollIntoView; disediakan supaya jalur normal
+// komponen ikut terlewati, bukan hanya jalur cadangannya.
+window.Element.prototype.scrollIntoView = function () {};
 globalThis.ResizeObserver = window.ResizeObserver = class {
   observe() {} unobserve() {} disconnect() {}
 };
@@ -357,7 +360,7 @@ t('DOM tidak kosong setelah render', () => {
 });
 
 t('elemen kunci antarmuka tergambar', () => {
-  for (const cls of ['gt-app', 'gt-sidebar', 'gt-map-wrap', 'gt-tabs']) {
+  for (const cls of ['gt-app', 'gt-sidebar', 'gt-map-wrap', 'gt-tabbar', 'gt-tab-label']) {
     assert.ok(html.includes(cls), `kelas "${cls}" tidak ditemukan pada hasil render`);
   }
 });
