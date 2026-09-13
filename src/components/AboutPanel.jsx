@@ -19,9 +19,10 @@ export function AboutPanel() {
   return (
     <div className="gt-about">
       <div className="gt-about-mark">
-        <img src="logo.svg" alt="" width="88" height="88" />
+        <img src="logo-mark.svg" alt="" width="88" height="88" />
         <div>
-          <h2>REIS</h2>
+          <img src="wordmark-REIS.svg" alt="REIS" className="gt-about-wordmark"
+            width="132" height="73" />
           <p>{t('app.subtitle')}</p>
           <p className="gt-about-by">MangGIS.co</p>
         </div>

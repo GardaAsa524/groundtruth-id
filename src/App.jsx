@@ -79,7 +79,7 @@ import {
 const TABS = ['map', 'layers', 'accuracy', 'export', 'settings', 'about'];
 
 function Workspace() {
-  const { t, nf, toggle: toggleLocale } = useLocale();
+  const { t, nf, locale, toggle: toggleLocale } = useLocale();
   const { isDark, toggle: toggleTheme, suggestedBasemap } = useTheme();
   const { samples, setSamples, drawnFeatures, setDrawnFeatures } = useProject();
 
@@ -396,13 +396,46 @@ function Workspace() {
   return (
     <div className="gt-app" data-theme={isDark ? 'dark' : 'light'}>
       <header className="gt-header">
-        <div>
-          <h1>{t('app.title')}</h1>
-          <p>{t('app.subtitle')} · MangGIS.co</p>
+        <div className="gt-brand">
+          {/*
+            Mawar angin sebagai penanda, wordmark sebagai nama. Keduanya
+            dipisah, bukan memakai berkas lockup, supaya pada layar sempit
+            mawar angin dapat tetap tampil sementara wordmark menyusut —
+            lockup adalah satu gambar utuh yang hanya bisa mengecil seluruhnya.
+
+            alt="" pada mawar angin disengaja: ia hiasan, dan namanya sudah
+            dibacakan oleh wordmark di sebelahnya. Memberi alt pada keduanya
+            membuat pembaca layar menyebut "REIS" dua kali.
+          */}
+          <img src="logo-mark.svg" alt="" className="gt-brand-icon"
+            width="40" height="40" />
+
+          <div className="gt-brand-text">
+            {/*
+              Wordmark sebagai gambar, bukan teks bergaya. Huruf I di dalamnya
+              adalah jarum kompas dan tidak dapat dibentuk fonta mana pun.
+              Judul teks tetap ada untuk pembaca layar dan mesin telusur.
+            */}
+            <img src="wordmark-REIS.svg" alt="REIS" className="gt-brand-mark"
+              width="150" height="83" />
+            <h1 className="gt-visually-hidden">{t('app.title')}</h1>
+            <p>{t('app.subtitle')} · MangGIS.co</p>
+          </div>
         </div>
+
         <div className="gt-header-actions">
-          <button type="button" onClick={toggleLocale}>{t('locale.toggle')}</button>
-          <button type="button" onClick={toggleTheme} aria-label={t('theme.toggle')}>
+          {/*
+            Tombol bahasa memakai kode dua huruf, bukan nama lengkapnya:
+            "Bahasa Indonesia" membungkus menjadi dua baris pada layar sempit
+            dan menabrak judul. Nama lengkapnya tetap terbaca pembaca layar
+            lewat aria-label.
+          */}
+          <button type="button" className="gt-hdr-btn" onClick={toggleLocale}
+            aria-label={t('locale.toggle')} title={t('locale.toggle')}>
+            {locale === 'id' ? 'EN' : 'ID'}
+          </button>
+          <button type="button" className="gt-hdr-btn" onClick={toggleTheme}
+            aria-label={t('theme.toggle')} title={t('theme.toggle')}>
             {isDark ? '☀' : '☾'}
           </button>
         </div>

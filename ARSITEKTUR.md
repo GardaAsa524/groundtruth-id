@@ -489,3 +489,25 @@ Supaya perencanaan berikutnya berpijak pada keadaan sebenarnya:
   yang tidak tersedia di lingkungan uji Node.
 - **Ekspor raster resolusi penuh.** `renderTiled` disebut di komentar sebagai
   jalur yang direncanakan; implementasinya belum ada.
+
+
+## Identitas visual
+
+Wordmark REIS memakai **Intel One Mono Bold**, berlisensi SIL Open Font
+License 1.1 (`public/LISENSI_Intel_One_Mono.txt`). Glifnya diubah menjadi
+jalur vektor, bukan dirujuk sebagai fonta: elemen `<text>` dengan `font-family`
+bergantung pada fonta yang terpasang di perangkat pembaca, dan bila tidak ada,
+peramban menggantinya diam-diam sehingga logo berubah bentuk.
+
+Huruf **I** diganti menjadi jarum kompas — ujung utara berwarna aksi, ujung
+selatan meredup, mengikuti konvensi mawar angin portolan. Lebarnya diikatkan
+pada tebal batang huruf I dalam fonta itu sendiri, diukur dengan memindai satu
+baris piksel di tengah tinggi kapital.
+
+Pengukuran itu perlu karena lebar tinta penuh huruf I pada fonta tebal adalah
+59 satuan, sedangkan batangnya hanya 22 — huruf I di Intel One Mono Bold punya
+palang di atas dan bawah. Jarum selebar 59 satuan menggembung dan terbaca
+seperti tetesan, bukan jarum.
+
+Margin kedua berkas diverifikasi dengan mengukur kotak batas piksel bukan-latar
+terhadap tepi kanvas, bukan dinilai dengan mata.
