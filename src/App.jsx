@@ -398,29 +398,19 @@ function Workspace() {
       <header className="gt-header">
         <div className="gt-brand">
           {/*
-            Mawar angin sebagai penanda, wordmark sebagai nama. Keduanya
-            dipisah, bukan memakai berkas lockup, supaya pada layar sempit
-            mawar angin dapat tetap tampil sementara wordmark menyusut —
-            lockup adalah satu gambar utuh yang hanya bisa mengecil seluruhnya.
+            Hanya wordmark, tanpa mawar angin. Di header sempit, mawar angin
+            memakan lebar yang dibutuhkan judul tanpa menambah keterangan —
+            namanya sudah terbaca dari wordmark itu sendiri. Mawar angin tetap
+            dipakai sebagai ikon peluncur dan di halaman Tentang.
 
-            alt="" pada mawar angin disengaja: ia hiasan, dan namanya sudah
-            dibacakan oleh wordmark di sebelahnya. Memberi alt pada keduanya
-            membuat pembaca layar menyebut "REIS" dua kali.
+            Wordmark sebagai gambar, bukan teks bergaya: huruf I di dalamnya
+            adalah jarum kompas dan tidak dapat dibentuk fonta mana pun.
+            Judul teks tetap ada untuk pembaca layar dan mesin telusur.
           */}
-          <img src="logo-mark.svg" alt="" className="gt-brand-icon"
-            width="40" height="40" />
-
-          <div className="gt-brand-text">
-            {/*
-              Wordmark sebagai gambar, bukan teks bergaya. Huruf I di dalamnya
-              adalah jarum kompas dan tidak dapat dibentuk fonta mana pun.
-              Judul teks tetap ada untuk pembaca layar dan mesin telusur.
-            */}
-            <img src="wordmark-REIS.svg" alt="REIS" className="gt-brand-mark"
-              width="150" height="83" />
-            <h1 className="gt-visually-hidden">{t('app.title')}</h1>
-            <p>{t('app.subtitle')} · MangGIS.co</p>
-          </div>
+          <img src="wordmark-REIS.svg" alt="REIS" className="gt-brand-mark"
+            width="150" height="83" />
+          <h1 className="gt-visually-hidden">{t('app.title')}</h1>
+          <p>{t('app.subtitle')} · MangGIS.co</p>
         </div>
 
         <div className="gt-header-actions">
